@@ -151,17 +151,7 @@ export default function HomePage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="לדוגמה: פרי"
-                style={styles.input}
-              />
-            </label>
-
-            <label style={styles.field}>
-              <div style={styles.label}>קישור (אופציונלי)</div>
-              <input
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://..."
+                placeholder="לדוגמה: ישראל ישראלי"
                 style={styles.input}
               />
             </label>
@@ -174,6 +164,16 @@ export default function HomePage() {
                 placeholder="כתבו משהו מרגש 🙂"
                 style={styles.textarea}
                 rows={5}
+              />
+           </label>
+
+            <label style={styles.field}>
+              <div style={styles.label}>קישור (אופציונלי)</div>
+              <input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://..."
+                style={styles.input}
               />
             </label>
           </div>
