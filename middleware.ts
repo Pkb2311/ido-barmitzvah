@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
-  // מגן רק על /admin וכל מה שמתחתיו
-  if (!req.nextUrl.pathname.startsWith("/admin")) {
+  const path = req.nextUrl.pathname;
+
+  // מגן על /admin וגם על /api/admin
+  const isAdminUI = path.startsWith("/admin");
+  const isAdminAPI = path.startsWith("/api/admin");
+
+  if (!isAdminUI && !isAdminAPI) {
     return NextResponse.next();
   }
 
@@ -14,12 +19,12 @@ export function middleware(req: NextRequest) {
   }
 
   const authHeader = req.headers.get("authorization") || "";
-  const expected = "Basic " + btoa(`admin:${password}`);
+  const expected = "Basic " + globalThis.btoa(`admin:${password}`);
 
   if (authHeader === expected) {
     return NextResponse.next();
   }
-  
+
   return new NextResponse("Authentication required", {
     status: 401,
     headers: {
