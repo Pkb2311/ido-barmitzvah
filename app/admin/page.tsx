@@ -1,6 +1,5 @@
 "use client";
 
-
 import { useEffect, useMemo, useState } from "react";
 
 type PostRow = {
@@ -230,11 +229,9 @@ function btn(kind: "primary" | "danger" | "default" = "default") {
     base.background = "rgba(46, 204, 113, 0.18)";
     base.border = "1px solid rgba(46, 204, 113, 0.45)";
   }
-
   if (kind === "danger") {
     base.background = "rgba(231, 76, 60, 0.18)";
     base.border = "1px solid rgba(231, 76, 60, 0.45)";
   }
-
   return base;
-}
+      }
