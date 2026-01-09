@@ -1,11 +1,3 @@
-export default function AdminPage() {
-  return (
-    <main style={{ padding: 40 }}>
-      <h1>אזור ניהול 🔐</h1>
-      <p>אם אתה רואה את זה – עמוד admin עובד.</p>
-    </main>
-  );
-}
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -92,9 +84,10 @@ export default function AdminPage() {
     await loadAll();
   }
 
-  const stats = useMemo(() => {
-    return { pending: pending.length, approved: approved.length };
-  }, [pending.length, approved.length]);
+  const stats = useMemo(
+    () => ({ pending: pending.length, approved: approved.length }),
+    [pending.length, approved.length]
+  );
 
   return (
     <div style={{ padding: 20, direction: "rtl", maxWidth: 1100, margin: "0 auto" }}>
@@ -110,7 +103,15 @@ export default function AdminPage() {
       </div>
 
       {err && (
-        <div style={{ background: "#4b1f1f", color: "white", padding: 12, borderRadius: 10, marginBottom: 16 }}>
+        <div
+          style={{
+            background: "#4b1f1f",
+            color: "white",
+            padding: 12,
+            borderRadius: 10,
+            marginBottom: 16,
+          }}
+        >
           {err}
         </div>
       )}
@@ -214,23 +215,8 @@ function Section(props: {
 }
 
 function btn(kind: "primary" | "danger" | "default" = "default") {
-  const base: any = {
+  const base: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
     border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.06)",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: 700,
-  };
-
-  if (kind === "primary") {
-    base.background = "rgba(46, 204, 113, 0.18)";
-    base.border = "1px solid rgba(46, 204, 113, 0.45)";
-  }
-  if (kind === "danger") {
-    base.background = "rgba(231, 76, 60, 0.18)";
-    base.border = "1px solid rgba(231, 76, 60, 0.45)";
-  }
-  return base;
-}
+    background: "
