@@ -146,7 +146,7 @@ export default function HomePage() {
           <h2 style={styles.h2}>השארת ברכה</h2>
 
           <div style={styles.grid}>
-            <label style={styles.field}>
+            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
               <div style={styles.label}>שם</div>
               <input
                 value={name}
