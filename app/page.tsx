@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type PostRow = {
   id: string;
@@ -8,7 +9,7 @@ type PostRow = {
   name: string;
   message: string;
   media_url: string | null;
-  media_type: string | null; // "image" | "video" | null
+  media_type: "image" | "video" | null;
   link_url: string | null;
 };
 
@@ -22,43 +23,45 @@ function formatDate(iso: string) {
 }
 
 export default function HomePage() {
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [posts, setPosts] = useState<PostRow[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(true);
+  const pickFileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
 
-  // 1) גלריה/קבצים רגיל
-  const pickInputRef = useRef<HTMLInputElement | null>(null);
-  // 2) מצלמה בנייד (capture)
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const canSubmit = useMemo(() => {
-    return name.trim().length > 0 && message.trim().length > 0 && !submitting;
-  }, [name, message, submitting]);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+  function showToast(txt: string) {
+    setToast(txt);
+    window.setTimeout(() => setToast(null), 3500);
   }
 
   async function loadPosts() {
-    setLoadingPosts(true);
+    setLoading(true);
     try {
       const res = await fetch("/api/posts", { cache: "no-store" });
       const j = await res.json().catch(() => ({}));
-
-      if (!res.ok) throw new Error(j?.error || "שגיאה בטעינת הברכות");
+      if (!res.ok) throw new Error(j?.error || "שגיאה בטעינה");
       setPosts(Array.isArray(j?.data) ? j.data : []);
     } catch (e: any) {
-      showToast(e?.message || "שגיאה בטעינה");
+      showToast(e?.message || "שגיאה בטעינת ברכות");
     } finally {
-      setLoadingPosts(false);
+      setLoading(false);
     }
   }
 
@@ -67,49 +70,56 @@ export default function HomePage() {
   }, []);
 
   function onSelectFile(f: File | null) {
-    if (!f) return;
-    setFile(f);
-    showToast(`נבחר קובץ: ${f.name}`);
-  }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
 
-  async function submit() {
-    if (!canSubmit) {
-      showToast("חובה למלא שם וברכה");
+    if (!f) {
+      setFile(null);
+      setPreviewUrl(null);
       return;
     }
 
-    // ולידציה עדינה ללינק
-    const l = linkUrl.trim();
-    if (l && !/^https?:\/\//i.test(l)) {
+    setFile(f);
+    setPreviewUrl(URL.createObjectURL(f));
+  }
+
+  async function submit() {
+    if (!name.trim() || !message.trim()) {
+      showToast("חובה למלא שם וברכה");
+      return;
+    }
+    if (linkUrl.trim() && !/^https?:\/\//i.test(linkUrl.trim())) {
       showToast("הלינק חייב להתחיל ב-http/https");
       return;
     }
 
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append("name", name.trim());
-      fd.append("message", message.trim());
-      if (l) fd.append("link_url", l);
-      if (file) fd.append("media", file);
+      const form = new FormData();
+      form.append("name", name.trim());
+      form.append("message", message.trim());
+      if (linkUrl.trim()) form.append("link_url", linkUrl.trim());
+      if (file) form.append("media", file);
 
-      const res = await fetch("/api/admin/posts", {
+      const res = await fetch("/api/posts", {
         method: "POST",
-        body: fd,
+        body: form,
       });
 
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בשליחה");
 
-      // ניקוי טופס
+      // לפי ה-API שלך: הוא מחזיר approved = true/false
+      if (j?.approved === false) {
+        showToast("נשלח בהצלחה ✅ מחכה לאישור מנהל");
+      } else {
+        showToast("נשלח בהצלחה ✅");
+      }
+
       setName("");
       setMessage("");
       setLinkUrl("");
-      setFile(null);
-      if (pickInputRef.current) pickInputRef.current.value = "";
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
+      onSelectFile(null);
 
-      showToast("נשלח! ✅");
       await loadPosts();
     } catch (e: any) {
       showToast(e?.message || "שגיאה בשליחה");
@@ -118,164 +128,173 @@ export default function HomePage() {
     }
   }
 
+  const count = useMemo(() => posts.length, [posts.length]);
+
   return (
     <main style={styles.page}>
       <div style={styles.container}>
         <header style={styles.header}>
-          <h1 style={styles.h1}>🎉 בר מצווה של עידו</h1>
-          <p style={styles.subtitle}>מעלים תמונה/סרטון/קישור או ברכה 💙</p>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <h1 style={styles.h1}>בר מצווה 🎉</h1>
+            <div style={styles.badge}>ברכות מאושרות: {count}</div>
+          </div>
+          <p style={styles.sub}>
+            כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.
+          </p>
         </header>
 
-        {/* טופס העלאה */}
         <section style={styles.card}>
-          <h2 style={styles.h2}>העלאת ברכה</h2>
+          <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={styles.field}>
-            <label style={styles.label}>שם</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="שם"
-              style={styles.input}
-              autoComplete="name"
-            />
+          <div style={styles.grid}>
+            <label style={styles.field}>
+              <div style={styles.label}>שם</div>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="לדוגמה: פרי"
+                style={styles.input}
+              />
+            </label>
+
+            <label style={styles.field}>
+              <div style={styles.label}>קישור (אופציונלי)</div>
+              <input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://..."
+                style={styles.input}
+              />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+              <div style={styles.label}>ברכה</div>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="כתבו משהו מרגש 🙂"
+                style={styles.textarea}
+                rows={5}
+              />
+            </label>
           </div>
 
-          <div style={styles.field}>
-            <label style={styles.label}>ברכה לעידו</label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="ברכה לעידו..."
-              style={styles.textarea}
-              rows={5}
-            />
-          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => pickFileRef.current?.click()}
+              style={btn("default")}
+              disabled={submitting}
+            >
+              העלאת תמונה/וידאו
+            </button>
 
-          <div style={styles.field}>
-            <label style={styles.label}>קישור (אופציונלי)</label>
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              style={btn("primary")}
+              disabled={submitting}
+              title="במובייל זה יפתח את המצלמה"
+            >
+              📸 צילום תמונה
+            </button>
+
+            {file ? (
+              <button
+                type="button"
+                onClick={() => onSelectFile(null)}
+                style={btn("danger")}
+                disabled={submitting}
+              >
+                הסר קובץ
+              </button>
+            ) : null}
+
+            <div style={{ marginInlineStart: "auto", display: "flex", gap: 10 }}>
+              <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || submitting}>
+                רענון
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                style={submitting ? btn("disabled") : btn("primary")}
+                disabled={submitting}
+              >
+                {submitting ? "שולח…" : "שליחה"}
+              </button>
+            </div>
+
+            {/* קלט רגיל (קבצים) */}
             <input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://..."
-              style={styles.input}
-              inputMode="url"
-            />
-          </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>מדיה (אופציונלי)</label>
-
-            {/* inputs נסתרים */}
-            <input
-              ref={pickInputRef}
+              ref={pickFileRef}
               type="file"
               accept="image/*,video/*"
-              name="media"
               style={{ display: "none" }}
-              onChange={(e) => onSelectFile(e.target.files?.[0] || null)}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
             />
 
+            {/* קלט מצלמה (ברוב המוביילים יפתח מצלמה) */}
             <input
-              ref={cameraInputRef}
+              ref={cameraRef}
               type="file"
               accept="image/*"
               capture="environment"
-              name="media_camera"
               style={{ display: "none" }}
-              onChange={(e) => onSelectFile(e.target.files?.[0] || null)}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
             />
+          </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button type="button" onClick={() => pickInputRef.current?.click()} style={btn("default")}>
-                🖼️ העלאה מהגלריה
-              </button>
-
-              <button type="button" onClick={() => cameraInputRef.current?.click()} style={btn("primary")}>
-                📷 צילום תמונה עכשיו
-              </button>
-
-              {file ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFile(null);
-                    if (pickInputRef.current) pickInputRef.current.value = "";
-                    if (cameraInputRef.current) cameraInputRef.current.value = "";
-                    showToast("הקובץ הוסר");
-                  }}
-                  style={btn("danger")}
-                >
-                  ✖ הסר קובץ
-                </button>
-              ) : null}
-            </div>
-
-            <div style={{ marginTop: 10, opacity: 0.8, fontSize: 13 }}>
-              {file ? (
-                <>
-                  נבחר: <b>{file.name}</b> ({Math.round(file.size / 1024)}KB)
-                </>
+          {previewUrl ? (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ opacity: 0.8, marginBottom: 8 }}>תצוגה מקדימה:</div>
+              {file?.type?.startsWith("video/") ? (
+                <video src={previewUrl} controls style={styles.media} />
               ) : (
-                <>לא נבחר קובץ</>
+                <img src={previewUrl} alt="" style={styles.media} />
               )}
             </div>
-          </div>
-
-          <button type="button" onClick={submit} disabled={!canSubmit} style={btn(canSubmit ? "primary" : "disabled")}>
-            {submitting ? "שולח..." : "שליחה"}
-          </button>
-
-          <div style={{ marginTop: 8, opacity: 0.75, fontSize: 13 }}>
-            תמונות/וידאו נשמרים לפי ההגדרות שלך ב־Supabase.
-          </div>
+          ) : null}
         </section>
 
-        {/* ברכות אחרונות */}
-        <section style={styles.section}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <h2 style={styles.h2}>ברכות אחרונות</h2>
-            <button type="button" onClick={loadPosts} style={btn("default")}>
-              רענון
-            </button>
-          </div>
+        <section style={styles.card}>
+          <h2 style={styles.h2}>ברכות מאושרות</h2>
 
-          {loadingPosts ? (
+          {loading ? (
             <div style={{ opacity: 0.8 }}>טוען…</div>
           ) : posts.length === 0 ? (
-            <div style={{ opacity: 0.8 }}>עדיין אין ברכות.</div>
+            <div style={{ opacity: 0.8 }}>עדיין אין ברכות מאושרות.</div>
           ) : (
-            <div style={styles.grid}>
+            <div style={styles.list}>
               {posts.map((p) => (
-                <div key={p.id} style={styles.postCard}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <article key={p.id} style={styles.postCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 800 }}>{p.name}</div>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{formatDate(p.created_at)}</div>
+                      <div style={{ fontWeight: 900, fontSize: 16 }}>{p.name}</div>
+                      <div style={{ opacity: 0.7, fontSize: 12 }}>{formatDate(p.created_at)}</div>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{p.message}</div>
+                  <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{p.message}</div>
 
-                  {p.link_url && (
+                  {p.link_url ? (
                     <div style={{ marginTop: 10 }}>
                       🔗{" "}
-                      <a href={p.link_url} target="_blank" rel="noreferrer">
+                      <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
                         {p.link_url}
                       </a>
                     </div>
-                  )}
+                  ) : null}
 
-                  {p.media_url && (
-                    <div style={{ marginTop: 10 }}>
+                  {p.media_url ? (
+                    <div style={{ marginTop: 12 }}>
                       {p.media_type === "video" ? (
                         <video src={p.media_url} controls style={styles.media} />
                       ) : (
                         <img src={p.media_url} alt="" style={styles.media} />
                       )}
                     </div>
-                  )}
-                </div>
+                  ) : null}
+                </article>
               ))}
             </div>
           )}
@@ -327,74 +346,82 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 18,
   },
   header: {
-    padding: "10px 2px",
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    padding: 16,
+    background: "rgba(255,255,255,0.04)",
+    backdropFilter: "blur(10px)",
   },
   h1: {
     margin: 0,
-    fontSize: 34,
-    letterSpacing: -0.3,
+    fontSize: 28,
+    letterSpacing: 0.2,
   },
-  subtitle: {
+  badge: {
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    fontSize: 12,
+    opacity: 0.95,
+  },
+  sub: {
     margin: "8px 0 0 0",
     opacity: 0.85,
+    lineHeight: 1.5,
   },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    padding: 16,
     background: "rgba(255,255,255,0.04)",
-    borderRadius: 18,
-    padding: 16,
-  },
-  section: {
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.03)",
-    borderRadius: 18,
-    padding: 16,
+    backdropFilter: "blur(10px)",
   },
   h2: {
-    margin: 0,
-    fontSize: 22,
+    margin: "0 0 12px 0",
+    fontSize: 18,
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
   },
   field: {
-    marginTop: 12,
-    marginBottom: 12,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
   },
   label: {
-    display: "block",
-    marginBottom: 6,
     opacity: 0.85,
-    fontWeight: 700,
     fontSize: 13,
   },
   input: {
     width: "100%",
-    padding: "12px 12px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.16)",
-    background: "rgba(0,0,0,0.18)",
+    background: "rgba(0,0,0,0.25)",
     color: "white",
+    padding: "12px 12px",
     outline: "none",
-    fontSize: 15,
   },
   textarea: {
     width: "100%",
-    padding: "12px 12px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.16)",
-    background: "rgba(0,0,0,0.18)",
+    background: "rgba(0,0,0,0.25)",
     color: "white",
+    padding: "12px 12px",
     outline: "none",
-    fontSize: 15,
     resize: "vertical",
   },
-  grid: {
-    marginTop: 14,
+  list: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gridTemplateColumns: "1fr 1fr",
     gap: 14,
   },
   postCard: {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.03)",
     borderRadius: 16,
     padding: 14,
     overflow: "hidden",
