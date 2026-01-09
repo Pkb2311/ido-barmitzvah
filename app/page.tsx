@@ -1,4 +1,4 @@
-"use client";
+8"use client";
 
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -445,6 +445,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     textAlign: "center",
     zIndex: 50,
-    backdropFilter: "blur(8px)",
+    backdropFilter: 
+      "blur(8px)",
   },
 };
