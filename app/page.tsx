@@ -22,15 +22,26 @@ function formatDate(iso: string) {
   }
 }
 
+function useIsMobile(breakpointPx = 720) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`);
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, [breakpointPx]);
+
+  return isMobile;
+}
+
 export default function HomePage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
-
-  // קישור (שלב 3)
-  const [hasLink, setHasLink] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
 
   const [file, setFile] = useState<File | null>(null);
@@ -41,6 +52,8 @@ export default function HomePage() {
 
   const pickFileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
+
+  const isMobile = useIsMobile(720);
 
   useEffect(() => {
     return () => {
@@ -86,16 +99,11 @@ export default function HomePage() {
   }
 
   async function submit() {
-    const cleanName = name.trim();
-    const cleanMsg = message.trim();
-    const cleanLink = linkUrl.trim();
-
-    if (!cleanName || !cleanMsg) {
+    if (!name.trim() || !message.trim()) {
       showToast("חובה למלא שם וברכה");
       return;
     }
-
-    if (hasLink && cleanLink && !/^https?:\/\//i.test(cleanLink)) {
+    if (linkUrl.trim() && !/^https?:\/\//i.test(linkUrl.trim())) {
       showToast("הלינק חייב להתחיל ב-http/https");
       return;
     }
@@ -103,10 +111,9 @@ export default function HomePage() {
     setSubmitting(true);
     try {
       const form = new FormData();
-      form.append("name", cleanName);
-      form.append("message", cleanMsg);
-
-      if (hasLink && cleanLink) form.append("link_url", cleanLink);
+      form.append("name", name.trim());
+      form.append("message", message.trim());
+      if (linkUrl.trim()) form.append("link_url", linkUrl.trim());
       if (file) form.append("media", file);
 
       const res = await fetch("/api/posts", {
@@ -125,10 +132,7 @@ export default function HomePage() {
 
       setName("");
       setMessage("");
-
-      setHasLink(false);
       setLinkUrl("");
-
       onSelectFile(null);
 
       await loadPosts();
@@ -141,6 +145,20 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
+  const gridStyle: React.CSSProperties = useMemo(() => {
+    return {
+      ...styles.grid,
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+    };
+  }, [isMobile]);
+
+  const listStyle: React.CSSProperties = useMemo(() => {
+    return {
+      ...styles.list,
+      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+    };
+  }, [isMobile]);
+
   return (
     <main style={styles.page}>
       <div style={styles.container}>
@@ -149,13 +167,15 @@ export default function HomePage() {
             <h1 style={styles.h1}>בר מצווה 🎉</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור.</p>
+          <p style={styles.sub}>
+            כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.
+          </p>
         </header>
 
         <section style={styles.card}>
           <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={styles.grid}>
+          <div style={gridStyle}>
             <label style={styles.field}>
               <div style={styles.label}>שם</div>
               <input
@@ -164,58 +184,6 @@ export default function HomePage() {
                 placeholder="לדוגמה: פרי"
                 style={styles.input}
               />
-            </label>
-
-            <label style={styles.field}>
-              <div style={styles.label}>העלאת מדיה (אופציונלי)</div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => pickFileRef.current?.click()}
-                  style={btn("default")}
-                  disabled={submitting}
-                >
-                  העלאת תמונה/וידאו
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => cameraRef.current?.click()}
-                  style={btn("primary")}
-                  disabled={submitting}
-                  title="במובייל זה יפתח את המצלמה"
-                >
-                  📸 צילום תמונה
-                </button>
-
-                {file ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelectFile(null)}
-                    style={btn("danger")}
-                    disabled={submitting}
-                  >
-                    הסר קובץ
-                  </button>
-                ) : null}
-
-                <input
-                  ref={pickFileRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  style={{ display: "none" }}
-                  onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-                />
-
-                <input
-                  ref={cameraRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  style={{ display: "none" }}
-                  onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-                />
-              </div>
             </label>
 
             <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
@@ -229,36 +197,76 @@ export default function HomePage() {
               />
             </label>
 
-            {/* שלב 3: הקישור מתחת לברכה */}
-            <div style={{ ...styles.field, gridColumn: "1 / -1" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input
-                  type="checkbox"
-                  checked={hasLink}
-                  onChange={(e) => {
-                    const v = e.target.checked;
-                    setHasLink(v);
-                    if (!v) setLinkUrl("");
-                  }}
-                />
-                <span style={{ opacity: 0.9 }}>יש לי קישור (אופציונלי)</span>
-              </label>
+            {/* ✅ הקישור עבר מתחת לברכה */}
+            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+              <div style={styles.label}>קישור (אופציונלי)</div>
+              <input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://..."
+                style={styles.input}
+              />
+            </label>
+          </div>
 
-              {hasLink ? (
-                <div style={{ marginTop: 10 }}>
-                  <div style={styles.label}>קישור</div>
-                  <input
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://..."
-                    style={styles.input}
-                  />
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-                    טיפ: ודא שהקישור מתחיל ב- <b>https://</b>
-                  </div>
-                </div>
-              ) : null}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => pickFileRef.current?.click()}
+              style={btn("default")}
+              disabled={submitting}
+            >
+              העלאת תמונה/וידאו
+            </button>
+
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              style={btn("primary")}
+              disabled={submitting}
+              title="במובייל זה יפתח את המצלמה"
+            >
+              📸 צילום תמונה
+            </button>
+
+            {file ? (
+              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
+                הסר קובץ
+              </button>
+            ) : null}
+
+            <div style={{ marginInlineStart: "auto", display: "flex", gap: 10 }}>
+              <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || submitting}>
+                רענון
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                style={submitting ? btn("disabled") : btn("primary")}
+                disabled={submitting}
+              >
+                {submitting ? "שולח…" : "שליחה"}
+              </button>
             </div>
+
+            {/* קלט רגיל (קבצים) */}
+            <input
+              ref={pickFileRef}
+              type="file"
+              accept="image/*,video/*"
+              style={{ display: "none" }}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+            />
+
+            {/* קלט מצלמה (ברוב המוביילים יפתח מצלמה) */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+            />
           </div>
 
           {previewUrl ? (
@@ -271,20 +279,6 @@ export default function HomePage() {
               )}
             </div>
           ) : null}
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
-            <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || submitting}>
-              רענון
-            </button>
-            <button
-              type="button"
-              onClick={submit}
-              style={submitting ? btn("disabled") : btn("primary")}
-              disabled={submitting}
-            >
-              {submitting ? "שולח…" : "שליחה"}
-            </button>
-          </div>
         </section>
 
         <section style={styles.card}>
@@ -295,7 +289,7 @@ export default function HomePage() {
           ) : posts.length === 0 ? (
             <div style={{ opacity: 0.8 }}>עדיין אין ברכות מאושרות.</div>
           ) : (
-            <div style={styles.list}>
+            <div style={listStyle}>
               {posts.map((p) => (
                 <article key={p.id} style={styles.postCard}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -414,7 +408,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
     gap: 12,
   },
   field: {
@@ -447,7 +440,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   list: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
     gap: 14,
   },
   postCard: {
