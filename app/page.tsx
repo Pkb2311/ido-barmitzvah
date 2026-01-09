@@ -33,7 +33,6 @@ export default function HomePage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
 
-  // שני inputs נסתרים:
   // 1) גלריה/קבצים רגיל
   const pickInputRef = useRef<HTMLInputElement | null>(null);
   // 2) מצלמה בנייד (capture)
@@ -188,19 +187,11 @@ export default function HomePage() {
             />
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => pickInputRef.current?.click()}
-                style={btn("default")}
-              >
+              <button type="button" onClick={() => pickInputRef.current?.click()} style={btn("default")}>
                 🖼️ העלאה מהגלריה
               </button>
 
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                style={btn("primary")}
-              >
+              <button type="button" onClick={() => cameraInputRef.current?.click()} style={btn("primary")}>
                 📷 צילום תמונה עכשיו
               </button>
 
@@ -231,17 +222,12 @@ export default function HomePage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!canSubmit}
-            style={btn(canSubmit ? "primary" : "disabled")}
-          >
+          <button type="button" onClick={submit} disabled={!canSubmit} style={btn(canSubmit ? "primary" : "disabled")}>
             {submitting ? "שולח..." : "שליחה"}
           </button>
 
           <div style={{ marginTop: 8, opacity: 0.75, fontSize: 13 }}>
-            תמונות/וידאו נשמרים עד 50MB (לפי ההגדרות שלך).
+            תמונות/וידאו נשמרים לפי ההגדרות שלך ב־Supabase.
           </div>
         </section>
 
@@ -269,9 +255,7 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>
-                    {p.message}
-                  </div>
+                  <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{p.message}</div>
 
                   {p.link_url && (
                     <div style={{ marginTop: 10 }}>
@@ -329,7 +313,8 @@ function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): R
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
+    background:
+      "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
     color: "white",
     direction: "rtl",
     padding: 18,
@@ -415,3 +400,24 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
   },
   media: {
+    width: "100%",
+    borderRadius: 14,
+    display: "block",
+  },
+  toast: {
+    position: "fixed",
+    left: 16,
+    right: 16,
+    bottom: 16,
+    margin: "0 auto",
+    maxWidth: 520,
+    background: "rgba(0,0,0,0.75)",
+    border: "1px solid rgba(255,255,255,0.18)",
+    color: "white",
+    padding: "12px 14px",
+    borderRadius: 14,
+    textAlign: "center",
+    zIndex: 50,
+    backdropFilter: "blur(8px)",
+  },
+};
