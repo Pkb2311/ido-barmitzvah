@@ -29,7 +29,8 @@ export default function HomePage() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
-
+  const [showLink, setShowLink] = useState(false);
+  
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
