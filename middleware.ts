@@ -19,7 +19,7 @@ export function middleware(req: NextRequest) {
   if (authHeader === expected) {
     return NextResponse.next();
   }
-
+  
   return new NextResponse("Authentication required", {
     status: 401,
     headers: {
