@@ -220,4 +220,21 @@ function btn(kind: "primary" | "danger" | "default" = "default") {
     padding: "10px 12px",
     borderRadius: 10,
     border: "1px solid rgba(255,255,255,0.18)",
-    background: "
+    background: "rgba(255,255,255,0.06)",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: 700,
+  };
+
+  if (kind === "primary") {
+    base.background = "rgba(46, 204, 113, 0.18)";
+    base.border = "1px solid rgba(46, 204, 113, 0.45)";
+  }
+
+  if (kind === "danger") {
+    base.background = "rgba(231, 76, 60, 0.18)";
+    base.border = "1px solid rgba(231, 76, 60, 0.45)";
+  }
+
+  return base;
+}
