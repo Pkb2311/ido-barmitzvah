@@ -108,7 +108,6 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בשליחה");
 
-      // לפי ה-API שלך: הוא מחזיר approved = true/false
       if (j?.approved === false) {
         showToast("נשלח בהצלחה ✅ מחכה לאישור מנהל");
       } else {
@@ -200,12 +199,7 @@ export default function HomePage() {
             </button>
 
             {file ? (
-              <button
-                type="button"
-                onClick={() => onSelectFile(null)}
-                style={btn("danger")}
-                disabled={submitting}
-              >
+              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
                 הסר קובץ
               </button>
             ) : null}
@@ -445,7 +439,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     textAlign: "center",
     zIndex: 50,
-    backdropFilter: 
-      "blur(8px)",
+    backdropFilter: "blur(8px)",
   },
 };
