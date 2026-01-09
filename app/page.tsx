@@ -147,36 +147,42 @@ export default function HomePage() {
           <h2 style={styles.h2}>השארת ברכה</h2>
 
           <div style={styles.grid}>
-            <label style={styles.field}>
-  <div style={styles.label}>שם</div>
-  <input
-    value={name}
-    onChange={(e) => setName(e.target.value)}
-    placeholder="לדוגמה: פרי"
-    style={styles.input}
-  />
-</label>
+  {/* שם */}
+  <label style={styles.field}>
+    <div style={styles.label}>שם</div>
+    <input
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      placeholder="לדוגמה: פרי"
+      style={styles.input}
+    />
+  </label>
 
-<label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-  <div style={styles.label}>ברכה</div>
-  <textarea
-    value={message}
-    onChange={(e) => setMessage(e.target.value)}
-    placeholder="כתבו משהו מרגש 🙂"
-    style={styles.textarea}
-    rows={5}
-  />
-</label>
+  {/* שומר על הגריד (עמודה שנייה) כדי שהשם לא יימתח על כל השורה */}
+  <div />
 
-<label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-  <div style={styles.label}>קישור (אופציונלי)</div>
-  <input
-    value={linkUrl}
-    onChange={(e) => setLinkUrl(e.target.value)}
-    placeholder="https://..."
-    style={styles.input}
-  />
-</label>
+  {/* ברכה - שורה מלאה */}
+  <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+    <div style={styles.label}>ברכה</div>
+    <textarea
+      value={message}
+      onChange={(e) => setMessage(e.target.value)}
+      placeholder="כתבו משהו מרגש 🙂"
+      style={styles.textarea}
+      rows={5}
+    />
+  </label>
+
+  {/* קישור - שורה מלאה (מתחת לברכה) */}
+  <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+    <div style={styles.label}>קישור (אופציונלי)</div>
+    <input
+      value={linkUrl}
+      onChange={(e) => setLinkUrl(e.target.value)}
+      placeholder="https://..."
+      style={styles.input}
+    />
+  </label>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
