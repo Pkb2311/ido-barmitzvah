@@ -24,7 +24,6 @@ export async function GET() {
   const { data, error } = await supabase.from("site_settings").select("value").eq("key", "ui_settings").single();
 
   if (error) {
-    // אם אין עדיין הגדרה בטבלה – נחזיר ברירת מחדל
     return NextResponse.json({ ok: true, ui: DEFAULT_UI }, { status: 200 });
   }
 
