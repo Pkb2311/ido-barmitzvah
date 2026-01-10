@@ -21,11 +21,9 @@ function getOrCreateOwnerToken() {
   if (typeof window === "undefined") return "";
   let t = window.localStorage.getItem(OWNER_TOKEN_KEY);
   if (!t) {
-    // טוקן אקראי פשוט (מספיק בשביל "בעלים לשעה")
     t =
       (crypto?.randomUUID?.() ??
-        `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`) +
-      "";
+        `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`) + "";
     window.localStorage.setItem(OWNER_TOKEN_KEY, t);
   }
   return t;
@@ -302,8 +300,9 @@ export default function HomePage() {
             ) : null}
           </div>
 
-          {/* כפתורים - מותאם מובייל */}
+          {/* כפתורים */}
           <div style={styles.actionsWrap}>
+            {/* שורה 1 */}
             <button
               type="button"
               onClick={() => pickFileRef.current?.click()}
@@ -323,6 +322,7 @@ export default function HomePage() {
               📸 צילום תמונה
             </button>
 
+            {/* שורה 2 */}
             <button
               type="button"
               onClick={() => setShowLink((v) => !v)}
@@ -332,13 +332,6 @@ export default function HomePage() {
               🔗 צרף קישור
             </button>
 
-            {file ? (
-              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
-                הסר קובץ
-              </button>
-            ) : null}
-
-            {/* רענון + שליחה */}
             <button
               type="button"
               onClick={loadPosts}
@@ -349,10 +342,23 @@ export default function HomePage() {
               רענון
             </button>
 
+            {/* שורה 3 */}
+            {file ? (
+              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
+                הסר קובץ
+              </button>
+            ) : (
+              <div style={{ opacity: 0 }} />
+            )}
+
+            {/* שליחה לבד בשורה (רוחב מלא) */}
             <button
               type="button"
               onClick={submit}
-              style={submitting ? btn("disabled") : btn("primary")}
+              style={{
+                ...(submitting ? btn("disabled") : btn("primary")),
+                ...styles.actionsRowFull,
+              }}
               disabled={submitting}
             >
               {submitting ? "שולח…" : "שליחה"}
@@ -506,6 +512,12 @@ export default function HomePage() {
   );
 }
 
+/**
+ * צבעים:
+ * - primary (שליחה): ירוק
+ * - default: כתום
+ * - danger: אדום
+ */
 function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
@@ -514,20 +526,26 @@ function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): R
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 800,
+    fontWeight: 900,
     width: "100%",
   };
 
   if (kind === "primary") {
+    // ירוק - רק שליחה
     return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
   }
+
   if (kind === "danger") {
+    // אדום - הסר קובץ
     return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
   }
+
   if (kind === "disabled") {
     return { ...base, opacity: 0.45, cursor: "not-allowed" };
   }
-  return base;
+
+  // כתום - כל השאר
+  return { ...base, background: "rgba(255, 153, 0, 0.22)", borderColor: "rgba(255, 153, 0, 0.50)" };
 }
 
 function btnSmall(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
@@ -538,18 +556,21 @@ function btnSmall(kind: "primary" | "danger" | "default" = "default"): React.CSS
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 800,
+    fontWeight: 900,
     fontSize: 13,
     whiteSpace: "nowrap",
   };
 
   if (kind === "primary") {
+    // שמירה - ירקרק עדין
     return { ...base, background: "rgba(46, 204, 113, 0.18)", borderColor: "rgba(46, 204, 113, 0.45)" };
   }
   if (kind === "danger") {
     return { ...base, background: "rgba(231, 76, 60, 0.18)", borderColor: "rgba(231, 76, 60, 0.45)" };
   }
-  return base;
+
+  // כתום - ברירת מחדל (עריכה/ביטול)
+  return { ...base, background: "rgba(255, 153, 0, 0.18)", borderColor: "rgba(255, 153, 0, 0.45)" };
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -586,7 +607,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 26,
     letterSpacing: 0.2,
-    fontWeight: 900,
+    fontWeight: 950,
   },
   badge: {
     padding: "6px 10px",
@@ -595,7 +616,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,0.06)",
     fontSize: 12,
     opacity: 0.95,
-    fontWeight: 800,
+    fontWeight: 900,
   },
   sub: {
     margin: "10px 0 0 0",
@@ -612,7 +633,7 @@ const styles: Record<string, React.CSSProperties> = {
   h2: {
     margin: "0 0 12px 0",
     fontSize: 18,
-    fontWeight: 900,
+    fontWeight: 950,
   },
   formGrid: {
     display: "grid",
@@ -627,7 +648,7 @@ const styles: Record<string, React.CSSProperties> = {
   label: {
     opacity: 0.9,
     fontSize: 13,
-    fontWeight: 800,
+    fontWeight: 900,
   },
   input: {
     width: "100%",
@@ -648,12 +669,17 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     resize: "vertical",
   },
+
   actionsWrap: {
     marginTop: 12,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 10,
   },
+  actionsRowFull: {
+    gridColumn: "1 / -1",
+  },
+
   smallNote: {
     marginTop: 12,
     opacity: 0.8,
@@ -680,7 +706,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   postName: {
-    fontWeight: 900,
+    fontWeight: 950,
     fontSize: 16,
   },
   postMeta: {
@@ -697,7 +723,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     border: "1px solid rgba(46, 204, 113, 0.45)",
     background: "rgba(46, 204, 113, 0.16)",
-    fontWeight: 900,
+    fontWeight: 950,
   },
   postBtns: {
     display: "flex",
@@ -735,6 +761,6 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     zIndex: 50,
     backdropFilter: "blur(8px)",
-    fontWeight: 900,
+    fontWeight: 950,
   },
 };
