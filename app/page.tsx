@@ -22,28 +22,18 @@ function formatDate(iso: string) {
   }
 }
 
-function useIsMobile(breakpointPx = 720) {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpointPx}px)`);
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
-  }, [breakpointPx]);
-
-  return isMobile;
-}
-
 export default function HomePage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+
+  // קישור
+  const [showLink, setShowLink] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
 
+  // מדיה
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -52,8 +42,6 @@ export default function HomePage() {
 
   const pickFileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
-
-  const isMobile = useIsMobile(720);
 
   useEffect(() => {
     return () => {
@@ -98,6 +86,11 @@ export default function HomePage() {
     setPreviewUrl(URL.createObjectURL(f));
   }
 
+  function clearLink() {
+    setLinkUrl("");
+    setShowLink(false);
+  }
+
   async function submit() {
     if (!name.trim() || !message.trim()) {
       showToast("חובה למלא שם וברכה");
@@ -132,7 +125,7 @@ export default function HomePage() {
 
       setName("");
       setMessage("");
-      setLinkUrl("");
+      clearLink();
       onSelectFile(null);
 
       await loadPosts();
@@ -145,19 +138,7 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
-  const gridStyle: React.CSSProperties = useMemo(() => {
-    return {
-      ...styles.grid,
-      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-    };
-  }, [isMobile]);
-
-  const listStyle: React.CSSProperties = useMemo(() => {
-    return {
-      ...styles.list,
-      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-    };
-  }, [isMobile]);
+  const linkInvalid = linkUrl.trim() && !/^https?:\/\//i.test(linkUrl.trim());
 
   return (
     <main style={styles.page}>
@@ -173,9 +154,9 @@ export default function HomePage() {
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.h2}>השארת ברכה ✅</h2>
+          <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={gridStyle}>
+          <div style={styles.grid}>
             <label style={styles.field}>
               <div style={styles.label}>שם</div>
               <input
@@ -185,6 +166,9 @@ export default function HomePage() {
                 style={styles.input}
               />
             </label>
+
+            {/* השדה השני ברשת נשאר פנוי כדי לא "להרוס" פריסה */}
+            <div />
 
             <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
               <div style={styles.label}>ברכה</div>
@@ -197,18 +181,43 @@ export default function HomePage() {
               />
             </label>
 
-            {/* ✅ הקישור עבר מתחת לברכה */}
-            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-              <div style={styles.label}>קישור (אופציונלי)</div>
-              <input
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://..."
-                style={styles.input}
-              />
-            </label>
+            {/* הקישור מתחת לשדה הברכה */}
+            {showLink ? (
+              <div style={{ ...styles.field, gridColumn: "1 / -1" }}>
+                <div style={styles.label}>קישור (אופציונלי)</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <input
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    style={{
+                      ...styles.input,
+                      flex: 1,
+                      minWidth: 220,
+                      borderColor: linkInvalid ? "rgba(231, 76, 60, 0.55)" : "rgba(255,255,255,0.16)",
+                    }}
+                    disabled={submitting}
+                  />
+                  <button type="button" onClick={clearLink} style={btn("danger")} disabled={submitting}>
+                    הסר קישור
+                  </button>
+                  <button type="button" onClick={() => setShowLink(false)} style={btn("default")} disabled={submitting}>
+                    סגור
+                  </button>
+                </div>
+
+                {linkInvalid ? (
+                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>⚠️ הקישור חייב להתחיל ב־http/https</div>
+                ) : !linkUrl.trim() ? (
+                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>הדבק קישור שמתחיל ב־https://</div>
+                ) : (
+                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>✅ נראה טוב</div>
+                )}
+              </div>
+            ) : null}
           </div>
 
+          {/* כפתורים: העלאה/צילום + כפתור צרף קישור מתחתיהם */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
             <button
               type="button"
@@ -227,6 +236,16 @@ export default function HomePage() {
               title="במובייל זה יפתח את המצלמה"
             >
               📸 צילום תמונה
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowLink(true)}
+              style={btn(linkUrl.trim() ? "primary" : "default")}
+              disabled={submitting}
+              title={linkUrl.trim() ? "קישור מצורף" : "לחץ כדי לצרף קישור"}
+            >
+              {linkUrl.trim() ? "✅ קישור מצורף" : "🔗 צרף קישור"}
             </button>
 
             {file ? (
@@ -289,7 +308,7 @@ export default function HomePage() {
           ) : posts.length === 0 ? (
             <div style={{ opacity: 0.8 }}>עדיין אין ברכות מאושרות.</div>
           ) : (
-            <div style={listStyle}>
+            <div style={styles.list}>
               {posts.map((p) => (
                 <article key={p.id} style={styles.postCard}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -408,6 +427,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: "grid",
+    gridTemplateColumns: "1fr 1fr",
     gap: 12,
   },
   field: {
@@ -440,6 +460,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   list: {
     display: "grid",
+    gridTemplateColumns: "1fr 1fr",
     gap: 14,
   },
   postCard: {
