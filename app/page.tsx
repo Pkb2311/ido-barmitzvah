@@ -144,7 +144,7 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={styles.header}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <h1 style={styles.h1}>בר מצווה 🎉</h1>
+            <h1 style={styles.h1}>בר מצווה ✅️✅️🎉</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
           <p style={styles.sub}>
