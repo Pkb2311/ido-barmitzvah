@@ -265,7 +265,7 @@ export default function HomePage() {
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.h2}>השארת ברכה</h2>
+          <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
 
           <div style={styles.formGrid}>
             <label style={styles.field}>
