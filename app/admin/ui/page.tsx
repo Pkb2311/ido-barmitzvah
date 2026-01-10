@@ -39,23 +39,16 @@ const DEFAULT_UI: UISettings = {
 };
 
 export default function AdminUIPage() {
-  const [adminSecret, setAdminSecret] = useState("");
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function apiAdmin(input: string, init?: RequestInit) {
-    const headers = new Headers(init?.headers || {});
-    if (adminSecret.trim()) headers.set("x-admin-secret", adminSecret.trim());
-    return fetch(input, { ...init, headers });
-  }
-
   async function load() {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await apiAdmin("/api/admin/settings", { cache: "no-store" as any });
+      const res = await fetch("/api/admin/settings", { cache: "no-store" as any });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בטעינת הגדרות");
       setUi((j?.ui as UISettings) || DEFAULT_UI);
@@ -68,7 +61,6 @@ export default function AdminUIPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function setTheme<K extends keyof UISettings["theme"]>(key: K, value: string) {
@@ -89,7 +81,7 @@ export default function AdminUIPage() {
     setSaving(true);
     setMsg(null);
     try {
-      const res = await apiAdmin("/api/admin/settings", {
+      const res = await fetch("/api/admin/settings", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ui }),
@@ -105,13 +97,14 @@ export default function AdminUIPage() {
   }
 
   const buttonsList = useMemo(
-    () => [
-      { key: "upload", title: "כפתור העלאת תמונה/וידאו" },
-      { key: "camera", title: "כפתור צילום" },
-      { key: "link", title: "כפתור צרף קישור" },
-      { key: "remove", title: "כפתור הסר קובץ" },
-      { key: "refresh", title: "כפתור רענון" },
-    ] as const,
+    () =>
+      [
+        { key: "upload", title: "כפתור העלאת תמונה/וידאו" },
+        { key: "camera", title: "כפתור צילום" },
+        { key: "link", title: "כפתור צרף קישור" },
+        { key: "remove", title: "כפתור הסר קובץ" },
+        { key: "refresh", title: "כפתור רענון" },
+      ] as const,
     []
   );
 
@@ -120,17 +113,7 @@ export default function AdminUIPage() {
       <h1 style={{ marginTop: 0 }}>🎛️ ניהול עיצוב וכפתורים</h1>
 
       <div style={card()}>
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>סיסמת ניהול (ADMIN_SECRET)</div>
-        <input
-          value={adminSecret}
-          onChange={(e) => setAdminSecret(e.target.value)}
-          placeholder="אם הוגדר ב-Vercel, הכנס כאן"
-          style={inp()}
-        />
-        <div style={{ opacity: 0.8, fontSize: 12, marginTop: 8 }}>
-          אם לא הגדרת ADMIN_SECRET ב-Vercel, אפשר להשאיר ריק (לא מומלץ).
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={load} style={btn("default")}>
             טען מחדש
           </button>
@@ -164,7 +147,7 @@ export default function AdminUIPage() {
               </label>
 
               <label style={field()}>
-                <div style={lab()}>צבע “danger” (למחיקה/הסר)</div>
+                <div style={lab()}>צבע “danger” (מחיקה/הסר)</div>
                 <input
                   type="color"
                   value={ui.theme.danger_color}
@@ -173,7 +156,7 @@ export default function AdminUIPage() {
               </label>
 
               <label style={field()}>
-                <div style={lab()}>צבע רקע אתר</div>
+                <div style={lab()}>צבע רקע</div>
                 <input type="color" value={ui.theme.bg} onChange={(e) => setTheme("bg", e.target.value)} />
               </label>
             </div>
@@ -186,9 +169,13 @@ export default function AdminUIPage() {
               {buttonsList.map((b) => {
                 const cfg = ui.buttons[b.key];
                 return (
-                  <div key={b.key} style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 12 }}>
+                  <div
+                    key={b.key}
+                    style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: 12 }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                       <div style={{ fontWeight: 900 }}>{b.title}</div>
+
                       <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <input
                           type="checkbox"
@@ -206,7 +193,7 @@ export default function AdminUIPage() {
                       </label>
 
                       <label style={field()}>
-                        <div style={lab()}>צבע הכפתור</div>
+                        <div style={lab()}>סוג צבע</div>
                         <select
                           value={cfg.color}
                           onChange={(e) => setButton(b.key, { color: e.target.value as any })}
@@ -216,9 +203,6 @@ export default function AdminUIPage() {
                           <option value="danger">Danger</option>
                           <option value="send">Send (ירוק)</option>
                         </select>
-                        <div style={{ opacity: 0.75, fontSize: 12, marginTop: 6 }}>
-                          * מומלץ להשאיר “Send” רק לכפתור שליחה.
-                        </div>
                       </label>
                     </div>
                   </div>
@@ -284,4 +268,3 @@ function btn(kind: "primary" | "default" = "default"): React.CSSProperties {
   if (kind === "primary") return { ...base, background: "rgba(46, 204, 113, 0.18)", borderColor: "rgba(46, 204, 113, 0.55)" };
   return base;
 }
-
