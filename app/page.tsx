@@ -11,7 +11,11 @@ type PostRow = {
   media_url: string | null;
   media_type: "image" | "video" | null;
   link_url: string | null;
+  editable_until?: string | null;
 };
+
+const OWNER_KEY = "ido_owner_token_v1";
+const EDIT_WINDOW_MS = 60 * 60 * 1000;
 
 function formatDate(iso: string) {
   try {
@@ -22,144 +26,19 @@ function formatDate(iso: string) {
   }
 }
 
-type EmbedInfo =
-  | { kind: "youtube"; src: string }
-  | { kind: "tiktok"; src: string }
-  | { kind: "instagram"; src: string };
-
-function getEmbedInfo(urlRaw: string): EmbedInfo | null {
-  const url = urlRaw.trim();
-  if (!url) return null;
-
-  // Must be http/https
-  if (!/^https?:\/\//i.test(url)) return null;
-
-  // --- YouTube ---
-  // supports:
-  // https://www.youtube.com/watch?v=VIDEOID
-  // https://youtu.be/VIDEOID
-  // https://www.youtube.com/shorts/VIDEOID
-  try {
-    const u = new URL(url);
-    const host = u.hostname.replace(/^www\./, "");
-
-    let ytId: string | null = null;
-
-    if (host === "youtu.be") {
-      ytId = u.pathname.split("/").filter(Boolean)[0] || null;
-    } else if (host === "youtube.com" || host === "m.youtube.com") {
-      const p = u.pathname;
-      if (p.startsWith("/watch")) {
-        ytId = u.searchParams.get("v");
-      } else if (p.startsWith("/shorts/")) {
-        ytId = p.split("/shorts/")[1]?.split(/[/?#]/)[0] ?? null;
-      } else if (p.startsWith("/embed/")) {
-        ytId = p.split("/embed/")[1]?.split(/[/?#]/)[0] ?? null;
-      }
-    }
-
-    if (ytId) {
-      // privacy-friendly domain
-      return { kind: "youtube", src: `https://www.youtube-nocookie.com/embed/${encodeURIComponent(ytId)}` };
-    }
-  } catch {
-    // ignore
-  }
-
-  // --- TikTok ---
-  // Typical:
-  // https://www.tiktok.com/@user/video/1234567890
-  // Also sometimes with extra query params
-  {
-    const m = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/i) || url.match(/tiktok\.com\/.*\/video\/(\d+)/i);
-    if (m?.[1]) {
-      const id = m[1];
-      // TikTok embed (works for many cases without API)
-      return { kind: "tiktok", src: `https://www.tiktok.com/embed/v2/${encodeURIComponent(id)}` };
-    }
-  }
-
-  // --- Instagram ---
-  // Typical:
-  // https://www.instagram.com/p/SHORTCODE/
-  // https://www.instagram.com/reel/SHORTCODE/
-  // https://www.instagram.com/tv/SHORTCODE/
-  {
-    const m = url.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/i);
-    if (m?.[2]) {
-      const shortcode = m[2];
-      // Instagram embed
-      return { kind: "instagram", src: `https://www.instagram.com/p/${encodeURIComponent(shortcode)}/embed` };
-    }
-  }
-
-  return null;
+function getOrCreateOwnerToken() {
+  if (typeof window === "undefined") return "";
+  const existing = window.localStorage.getItem(OWNER_KEY);
+  if (existing) return existing;
+  const token = `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
+  window.localStorage.setItem(OWNER_KEY, token);
+  return token;
 }
 
-function EmbedPreview({
-  url,
-  style,
-}: {
-  url: string;
-  style?: React.CSSProperties;
-}) {
-  const info = getEmbedInfo(url);
-
-  if (!info) return null;
-
-  // Unified sizing for mobile
-  const frameStyle: React.CSSProperties = {
-    width: "100%",
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(0,0,0,0.25)",
-    overflow: "hidden",
-    ...style,
-  };
-
-  if (info.kind === "youtube") {
-    return (
-      <div style={frameStyle}>
-        <div style={{ position: "relative", paddingTop: "56.25%" }}>
-          <iframe
-            src={info.src}
-            title="YouTube preview"
-            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (info.kind === "tiktok") {
-    return (
-      <div style={frameStyle}>
-        <iframe
-          src={info.src}
-          title="TikTok preview"
-          style={{ width: "100%", height: 560, border: 0 }}
-          allow="encrypted-media; fullscreen"
-          referrerPolicy="strict-origin-when-cross-origin"
-        />
-      </div>
-    );
-  }
-
-  // instagram
-  return (
-    <div style={frameStyle}>
-      <iframe
-        src={info.src}
-        title="Instagram preview"
-        style={{ width: "100%", height: 560, border: 0 }}
-        allow="encrypted-media; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
-      />
-    </div>
-  );
+function canEditNow(editable_until?: string | null) {
+  if (!editable_until) return false;
+  const t = new Date(editable_until).getTime();
+  return Date.now() <= t;
 }
 
 export default function HomePage() {
@@ -180,6 +59,18 @@ export default function HomePage() {
 
   const pickFileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
+
+  const [ownerToken, setOwnerToken] = useState("");
+
+  // מצב עריכה
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [editLinkUrl, setEditLinkUrl] = useState("");
+  const [editRemoveMedia, setEditRemoveMedia] = useState(false);
+
+  useEffect(() => {
+    setOwnerToken(getOrCreateOwnerToken());
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -230,9 +121,14 @@ export default function HomePage() {
       return;
     }
 
-    const link = linkUrl.trim();
-    if (showLink && link && !/^https?:\/\//i.test(link)) {
+    const finalLink = showLink ? linkUrl.trim() : "";
+    if (finalLink && !/^https?:\/\//i.test(finalLink)) {
       showToast("הלינק חייב להתחיל ב-http/https");
+      return;
+    }
+
+    if (!ownerToken) {
+      showToast("שגיאה: אין owner token (רענן דף)");
       return;
     }
 
@@ -241,11 +137,14 @@ export default function HomePage() {
       const form = new FormData();
       form.append("name", name.trim());
       form.append("message", message.trim());
-      if (showLink && link) form.append("link_url", link);
+      if (finalLink) form.append("link_url", finalLink);
       if (file) form.append("media", file);
 
       const res = await fetch("/api/posts", {
         method: "POST",
+        headers: {
+          "x-owner-token": ownerToken,
+        },
         body: form,
       });
 
@@ -272,6 +171,94 @@ export default function HomePage() {
     }
   }
 
+  function startEdit(p: PostRow) {
+    // חשוב: אנחנו לא יודעים בוודאות שהוא "בעלים" כי אנחנו לא מחזירים owner_token מהשרת.
+    // לכן הכפתורים מוצגים לפי editable_until בלבד, והשרת יאשר/יחסום לפי token בפועל.
+    setEditingId(p.id);
+    setEditMessage(p.message || "");
+    setEditLinkUrl(p.link_url || "");
+    setEditRemoveMedia(false);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditMessage("");
+    setEditLinkUrl("");
+    setEditRemoveMedia(false);
+  }
+
+  async function saveEdit(id: string) {
+    if (!ownerToken) {
+      showToast("שגיאה: אין owner token");
+      return;
+    }
+    if (!editMessage.trim()) {
+      showToast("אי אפשר להשאיר ברכה ריקה");
+      return;
+    }
+    if (editLinkUrl.trim() && !/^https?:\/\//i.test(editLinkUrl.trim())) {
+      showToast("הלינק חייב להתחיל ב-http/https");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/posts", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-owner-token": ownerToken,
+        },
+        body: JSON.stringify({
+          id,
+          message: editMessage.trim(),
+          link_url: editLinkUrl.trim(),
+          remove_media: editRemoveMedia,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה בעריכה");
+
+      showToast("עודכן ✅");
+      cancelEdit();
+      await loadPosts();
+    } catch (e: any) {
+      showToast(e?.message || "שגיאה בעריכה");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deletePost(id: string) {
+    if (!confirm("למחוק את הברכה?")) return;
+    if (!ownerToken) {
+      showToast("שגיאה: אין owner token");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/posts", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-owner-token": ownerToken,
+        },
+        body: JSON.stringify({ id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה במחיקה");
+
+      showToast("נמחק ✅");
+      cancelEdit();
+      await loadPosts();
+    } catch (e: any) {
+      showToast(e?.message || "שגיאה במחיקה");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const count = useMemo(() => posts.length, [posts.length]);
 
   return (
@@ -279,29 +266,22 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={styles.header}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <h1 style={styles.h1}>בר מצווה 🎉✅✅</h1>
+            <h1 style={styles.h1}>בר מצווה 🎉</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>
-            כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או קישור (YouTube/Instagram/TikTok עם תצוגה מקדימה). במובייל אפשר גם לצלם.
-          </p>
+          <p style={styles.sub}>כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.</p>
         </header>
 
         <section style={styles.card}>
           <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={styles.gridOneCol}>
+          <div style={styles.grid}>
             <label style={styles.field}>
               <div style={styles.label}>שם</div>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="לדוגמה: פרי"
-                style={styles.input}
-              />
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: פרי" style={styles.input} />
             </label>
 
-            <label style={styles.field}>
+            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
               <div style={styles.label}>ברכה</div>
               <textarea
                 value={message}
@@ -312,108 +292,78 @@ export default function HomePage() {
               />
             </label>
 
+            {/* קישור מתחת לשדה ברכה, ורק אם הופעל */}
             {showLink ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <label style={styles.field}>
-                  <div style={styles.label}>קישור (אופציונלי)</div>
-                  <input
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://youtube.com/... / instagram / tiktok"
-                    style={styles.input}
-                  />
-                </label>
-
-                {/* Preview for link */}
-                {linkUrl.trim() ? (
-                  <div>
-                    <div style={{ opacity: 0.8, marginBottom: 8 }}>תצוגה מקדימה לקישור:</div>
-                    <EmbedPreview url={linkUrl} />
-                    {/* Fallback link always available */}
-                    <div style={{ marginTop: 8, opacity: 0.85, fontSize: 12 }}>
-                      אם התצוגה המקדימה לא נטענת — עדיין נצרף את הקישור עצמו.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+                <div style={styles.label}>קישור (אופציונלי)</div>
+                <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." style={styles.input} />
+              </label>
             ) : null}
           </div>
 
-          {/* Buttons - mobile friendly grid */}
-          <div style={styles.actionsGrid}>
-            <button
-              type="button"
-              onClick={() => pickFileRef.current?.click()}
-              style={btn("default")}
-              disabled={submitting}
-            >
+          {/* כפתורים מותאמים למובייל: אחידים ורוחב מלא */}
+          <div style={styles.actions}>
+            <button type="button" onClick={() => pickFileRef.current?.click()} style={styles.btnFull} disabled={submitting}>
               העלאת תמונה/וידאו
             </button>
 
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              style={btn("primary")}
+              style={{ ...styles.btnFull, ...styles.btnGreen }}
               disabled={submitting}
               title="במובייל זה יפתח את המצלמה"
             >
-              צילום תמונה 📸
+              📸 צילום תמונה
             </button>
 
             <button
               type="button"
               onClick={() => setShowLink((v) => !v)}
-              style={btn("default")}
+              style={styles.btnFull}
               disabled={submitting}
             >
-              {showLink ? "הסתר קישור" : "צרף קישור 🔗"}
+              {showLink ? "הסר קישור" : "צרף קישור"}
             </button>
 
             {file ? (
-              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
+              <button type="button" onClick={() => onSelectFile(null)} style={{ ...styles.btnFull, ...styles.btnRed }} disabled={submitting}>
                 הסר קובץ
               </button>
-            ) : (
-              <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || submitting}>
-                רענון
-              </button>
-            )}
+            ) : null}
 
-            <button
-              type="button"
-              onClick={submit}
-              style={submitting ? btn("disabled") : btn("primary")}
-              disabled={submitting}
-            >
+            <button type="button" onClick={submit} style={{ ...styles.btnFull, ...styles.btnGreen }} disabled={submitting}>
               {submitting ? "שולח…" : "שליחה"}
             </button>
-          </div>
 
-          {/* Inputs */}
-          <input
-            ref={pickFileRef}
-            type="file"
-            accept="image/*,video/*"
-            style={{ display: "none" }}
-            onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-          />
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: "none" }}
-            onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-          />
+            <button type="button" onClick={loadPosts} style={styles.btnFull} disabled={loading || submitting}>
+              רענון
+            </button>
+
+            {/* קלט רגיל (קבצים) */}
+            <input
+              ref={pickFileRef}
+              type="file"
+              accept="image/*,video/*"
+              style={{ display: "none" }}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+            />
+
+            {/* קלט מצלמה */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+            />
+          </div>
 
           {previewUrl ? (
             <div style={{ marginTop: 14 }}>
-              <div style={{ opacity: 0.8, marginBottom: 8 }}>תצוגה מקדימה לקובץ:</div>
-              {file?.type?.startsWith("video/") ? (
-                <video src={previewUrl} controls style={styles.media} />
-              ) : (
-                <img src={previewUrl} alt="" style={styles.media} />
-              )}
+              <div style={{ opacity: 0.8, marginBottom: 8 }}>תצוגה מקדימה:</div>
+              {file?.type?.startsWith("video/") ? <video src={previewUrl} controls style={styles.media} /> : <img src={previewUrl} alt="" style={styles.media} />}
             </div>
           ) : null}
         </section>
@@ -426,42 +376,99 @@ export default function HomePage() {
           ) : posts.length === 0 ? (
             <div style={{ opacity: 0.8 }}>עדיין אין ברכות מאושרות.</div>
           ) : (
-            <div style={styles.listOneCol}>
-              {posts.map((p) => (
-                <article key={p.id} style={styles.postCard}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontWeight: 900, fontSize: 16 }}>{p.name}</div>
-                      <div style={{ opacity: 0.7, fontSize: 12 }}>{formatDate(p.created_at)}</div>
-                    </div>
-                  </div>
+            <div style={styles.list}>
+              {posts.map((p) => {
+                const editable = canEditNow(p.editable_until || null);
+                const isEditing = editingId === p.id;
 
-                  <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{p.message}</div>
-
-                  {/* Link preview in posts */}
-                  {p.link_url ? (
-                    <div style={{ marginTop: 12 }}>
-                      <EmbedPreview url={p.link_url} />
-                      <div style={{ marginTop: 8 }}>
-                        🔗{" "}
-                        <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
-                          פתח קישור
-                        </a>
+                return (
+                  <article key={p.id} style={styles.postCard}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontWeight: 900, fontSize: 16 }}>{p.name}</div>
+                        <div style={{ opacity: 0.7, fontSize: 12 }}>{formatDate(p.created_at)}</div>
                       </div>
-                    </div>
-                  ) : null}
 
-                  {p.media_url ? (
-                    <div style={{ marginTop: 12 }}>
-                      {p.media_type === "video" ? (
-                        <video src={p.media_url} controls style={styles.media} />
-                      ) : (
-                        <img src={p.media_url} alt="" style={styles.media} />
-                      )}
+                      {/* פעולות למי ששלח - לשעה בלבד (השרת יאמת לפי token) */}
+                      {editable ? (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button type="button" onClick={() => startEdit(p)} style={miniBtn()}>
+                            ✏️ עריכה
+                          </button>
+                          <button type="button" onClick={() => deletePost(p.id)} style={miniBtn("danger")}>
+                            🗑️ מחיקה
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                </article>
-              ))}
+
+                    {isEditing ? (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div style={{ fontSize: 12, opacity: 0.8 }}>
+                          אפשר לערוך/למחוק עד שעה אחרי השליחה. אם ייחסם – זה בגלל שפג הזמן או שזה לא אותו מכשיר.
+                        </div>
+
+                        <textarea
+                          value={editMessage}
+                          onChange={(e) => setEditMessage(e.target.value)}
+                          style={styles.textarea}
+                          rows={4}
+                        />
+
+                        <input
+                          value={editLinkUrl}
+                          onChange={(e) => setEditLinkUrl(e.target.value)}
+                          placeholder="https://..."
+                          style={styles.input}
+                        />
+
+                        {p.media_url ? (
+                          <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, opacity: 0.95 }}>
+                            <input
+                              type="checkbox"
+                              checked={editRemoveMedia}
+                              onChange={(e) => setEditRemoveMedia(e.target.checked)}
+                            />
+                            להסיר מדיה מהברכה (תמונה/וידאו)
+                          </label>
+                        ) : null}
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <button type="button" onClick={() => saveEdit(p.id)} style={miniBtn("primary")} disabled={submitting}>
+                            שמירה ✅
+                          </button>
+                          <button type="button" onClick={cancelEdit} style={miniBtn()} disabled={submitting}>
+                            ביטול
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{p.message}</div>
+
+                        {p.link_url ? (
+                          <div style={{ marginTop: 10 }}>
+                            🔗{" "}
+                            <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+                              {p.link_url}
+                            </a>
+                          </div>
+                        ) : null}
+
+                        {p.media_url ? (
+                          <div style={{ marginTop: 12 }}>
+                            {p.media_type === "video" ? (
+                              <video src={p.media_url} controls style={styles.media} />
+                            ) : (
+                              <img src={p.media_url} alt="" style={styles.media} />
+                            )}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -472,58 +479,45 @@ export default function HomePage() {
   );
 }
 
-function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): React.CSSProperties {
+function miniBtn(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
   const base: React.CSSProperties = {
-    padding: "14px 14px",
-    borderRadius: 14,
+    padding: "8px 10px",
+    borderRadius: 10,
     border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 800,
-    width: "100%",
+    fontWeight: 700,
+    fontSize: 12,
   };
-
-  if (kind === "primary") {
-    return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
-  }
-  if (kind === "danger") {
-    return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
-  }
-  if (kind === "disabled") {
-    return { ...base, opacity: 0.45, cursor: "not-allowed" };
-  }
+  if (kind === "primary") return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
+  if (kind === "danger") return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
   return base;
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
+    background: "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
     color: "white",
     direction: "rtl",
-    padding: 18,
+    padding: 14,
   },
   container: {
-    maxWidth: 560, // mobile-first
+    maxWidth: 980,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    gap: 18,
+    gap: 14,
   },
   header: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
-    padding: 16,
+    padding: 14,
     background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
-  h1: {
-    margin: 0,
-    fontSize: 28,
-    letterSpacing: 0.2,
-  },
+  h1: { margin: 0, fontSize: 28, letterSpacing: 0.2 },
   badge: {
     padding: "6px 10px",
     borderRadius: 999,
@@ -532,66 +526,64 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     opacity: 0.95,
   },
-  sub: {
-    margin: "8px 0 0 0",
-    opacity: 0.85,
-    lineHeight: 1.5,
-  },
+  sub: { margin: "8px 0 0 0", opacity: 0.85, lineHeight: 1.5 },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
-    padding: 16,
+    padding: 14,
     background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
-  h2: {
-    margin: "0 0 12px 0",
-    fontSize: 18,
-  },
-  gridOneCol: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 12,
-  },
-  field: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-  label: {
-    opacity: 0.85,
-    fontSize: 13,
-  },
+  h2: { margin: "0 0 12px 0", fontSize: 18 },
+  grid: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
+  field: { display: "flex", flexDirection: "column", gap: 6 },
+  label: { opacity: 0.85, fontSize: 13 },
   input: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
-    padding: "14px 12px",
+    padding: "12px 12px",
     outline: "none",
   },
   textarea: {
     width: "100%",
-    borderRadius: 14,
+    borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
-    padding: "14px 12px",
+    padding: "12px 12px",
     outline: "none",
     resize: "vertical",
   },
-  actionsGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 10,
-    marginTop: 14,
-  },
-  listOneCol: {
+
+  actions: {
+    marginTop: 12,
     display: "grid",
     gridTemplateColumns: "1fr",
-    gap: 14,
+    gap: 10,
   },
+  btnFull: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: 800,
+  },
+  btnGreen: {
+    background: "rgba(46, 204, 113, 0.22)",
+    borderColor: "rgba(46, 204, 113, 0.45)",
+  },
+  btnRed: {
+    background: "rgba(231, 76, 60, 0.20)",
+    borderColor: "rgba(231, 76, 60, 0.45)",
+  },
+
+  list: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
   postCard: {
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.03)",
@@ -599,11 +591,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 14,
     overflow: "hidden",
   },
-  media: {
-    width: "100%",
-    borderRadius: 14,
-    display: "block",
-  },
+  media: { width: "100%", borderRadius: 14, display: "block" },
   toast: {
     position: "fixed",
     left: 16,
