@@ -1,42 +1,45 @@
-// app/api/admin/settings/route.ts
 import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabaseServer";
 
-function mustBeServiceRole() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return "חסר SUPABASE_SERVICE_ROLE_KEY ב-Vercel (חובה לאדמין)";
-  }
-  return null;
+function requireAdmin(req: Request) {
+  const pass = process.env.ADMIN_PASSWORD || "";
+  const got = req.headers.get("x-admin-password") || "";
+  return pass && got && pass === got;
 }
 
-export async function GET() {
-  const missing = mustBeServiceRole();
-  if (missing) return NextResponse.json({ error: missing }, { status: 500 });
+export async function GET(req: Request) {
+  if (!requireAdmin(req)) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
   const supabase = supabaseServer();
-  const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
+
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("key, value")
+    .eq("key", "upload_settings")
+    .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ value: data?.value || {} }, { status: 200 });
+
+  return NextResponse.json({ ok: true, value: data?.value ?? {} }, { status: 200 });
 }
 
-// PUT { value: {...} }
 export async function PUT(req: Request) {
-  const missing = mustBeServiceRole();
-  if (missing) return NextResponse.json({ error: missing }, { status: 500 });
+  if (!requireAdmin(req)) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const supabase = supabaseServer();
   const body = await req.json().catch(() => null);
-  const value = body?.value;
+  const value = body?.value ?? null;
 
   if (!value || typeof value !== "object") {
-    return NextResponse.json({ error: "חסר value (object)" }, { status: 400 });
+    return NextResponse.json({ error: "value must be an object" }, { status: 400 });
   }
+
+  const supabase = supabaseServer();
 
   const { error } = await supabase
     .from("site_settings")
-    .upsert({ key: "site", value }, { onConflict: "key" });
+    .upsert({ key: "upload_settings", value }, { onConflict: "key" });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
   return NextResponse.json({ ok: true }, { status: 200 });
 }
