@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 
 type PostRow = {
@@ -8,9 +9,52 @@ type PostRow = {
   name: string;
   message: string;
   media_url: string | null;
-  media_type: string | null; // "image" | "video" | null
+  media_type: string | null;
   link_url: string | null;
   approved: boolean;
+};
+
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type UISettings = {
+  theme: {
+    send_color: string;
+    default_color: string;
+    danger_color: string;
+    bg: string;
+    card_bg: string;
+  };
+  buttons: {
+    upload: UIButtonCfg;
+    camera: UIButtonCfg;
+    link: UIButtonCfg;
+    remove: UIButtonCfg;
+    refresh: UIButtonCfg;
+  };
+};
+
+type SiteSettings = {
+  require_approval: boolean;
+  ui: UISettings;
+};
+
+const DEFAULT_SETTINGS: SiteSettings = {
+  require_approval: true,
+  ui: {
+    theme: {
+      send_color: "#2ecc71",
+      default_color: "#ff9500",
+      danger_color: "#ff3b30",
+      bg: "#0b1020",
+      card_bg: "rgba(255,255,255,0.04)",
+    },
+    buttons: {
+      upload: { show: true, label: "העלאת תמונה/וידאו", color: "default" },
+      camera: { show: true, label: "📸 צילום תמונה", color: "default" },
+      link: { show: true, label: "🔗 צרף קישור", color: "default" },
+      remove: { show: true, label: "הסר קובץ", color: "danger" },
+      refresh: { show: true, label: "רענון", color: "default" },
+    },
+  },
 };
 
 function formatDate(iso: string) {
@@ -25,11 +69,22 @@ function formatDate(iso: string) {
 export default function AdminPage() {
   const [pending, setPending] = useState<PostRow[]>([]);
   const [approved, setApproved] = useState<PostRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function loadAll() {
-    setLoading(true);
+  function showToast(txt: string) {
+    setToast(txt);
+    window.setTimeout(() => setToast(null), 3500);
+  }
+
+  async function loadPosts() {
+    setLoadingPosts(true);
     setErr(null);
     try {
       const [p, a] = await Promise.all([
@@ -43,45 +98,98 @@ export default function AdminPage() {
       setPending(p.data || []);
       setApproved(a.data || []);
     } catch (e: any) {
-      setErr(e?.message || "שגיאה בטעינת נתונים");
+      setErr(e?.message || "שגיאה בטעינת ברכות");
     } finally {
-      setLoading(false);
+      setLoadingPosts(false);
+    }
+  }
+
+  async function loadSettings() {
+    setLoadingSettings(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/admin/settings", { cache: "no-store" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה בטעינת הגדרות");
+
+      const value = j?.value || {};
+      setSettings({
+        require_approval: value?.require_approval ?? DEFAULT_SETTINGS.require_approval,
+        ui: value?.ui ?? DEFAULT_SETTINGS.ui,
+      });
+    } catch (e: any) {
+      setErr(e?.message || "שגיאה בטעינת הגדרות");
+    } finally {
+      setLoadingSettings(false);
     }
   }
 
   useEffect(() => {
-    loadAll();
+    loadPosts();
+    loadSettings();
   }, []);
 
   async function setApprove(id: string, value: boolean) {
     setErr(null);
-    const res = await fetch("/api/admin/posts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, approved: value }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setErr(j?.error || "שגיאה בעדכון אישור");
-      return;
+    try {
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, approved: value }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה בעדכון אישור");
+
+      showToast(value ? "אושר ✅" : "בוטל אישור ✅");
+      await loadPosts();
+    } catch (e: any) {
+      setErr(e?.message || "שגיאה בעדכון אישור");
     }
-    await loadAll();
   }
 
   async function deletePost(id: string) {
-    if (!confirm("למחוק את הברכה?")) return;
+    const ok = window.confirm("למחוק את הברכה? זה בלתי הפיך.");
+    if (!ok) return;
+
     setErr(null);
-    const res = await fetch("/api/admin/posts", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setErr(j?.error || "שגיאה במחיקה");
-      return;
+    try {
+      const res = await fetch("/api/admin/posts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה במחיקה");
+
+      showToast("נמחק ✅");
+      await loadPosts();
+    } catch (e: any) {
+      setErr(e?.message || "שגיאה במחיקה");
     }
-    await loadAll();
+  }
+
+  async function saveSettings() {
+    setSaving(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: settings }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה בשמירת הגדרות");
+
+      showToast("הגדרות נשמרו ✅");
+      await loadSettings();
+    } catch (e: any) {
+      setErr(e?.message || "שגיאה בשמירת הגדרות");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const stats = useMemo(
@@ -89,56 +197,194 @@ export default function AdminPage() {
     [pending.length, approved.length]
   );
 
+  const ui = settings.ui;
+
   return (
-    <div style={{ padding: 20, direction: "rtl", maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 6 }}>🔐 אזור ניהול</h1>
-      <p style={{ opacity: 0.8, marginTop: 0 }}>
+    <div style={styles.page}>
+      <h1 style={styles.h1}>ניהול</h1>
+      <p style={styles.sub}>
         ממתינים: <b>{stats.pending}</b> · מאושרים: <b>{stats.approved}</b>
       </p>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-        <button onClick={loadAll} style={btn()}>
-          רענון
-        </button>
+      {err ? <div style={styles.err}>{err}</div> : null}
+      {toast ? <div style={styles.toast}>{toast}</div> : null}
+
+      <div style={styles.grid2}>
+        {/* הגדרות */}
+        <div style={styles.card}>
+          <h2 style={styles.h2}>הגדרות אתר</h2>
+
+          {loadingSettings ? (
+            <div style={{ opacity: 0.8 }}>טוען הגדרות…</div>
+          ) : (
+            <>
+              <label style={styles.row}>
+                <input
+                  type="checkbox"
+                  checked={!!settings.require_approval}
+                  onChange={(e) => setSettings((s) => ({ ...s, require_approval: e.target.checked }))}
+                />
+                <div>
+                  <div style={{ fontWeight: 900 }}>דורש אישור מנהל לפני פרסום</div>
+                  <div style={{ opacity: 0.8, fontSize: 12 }}>
+                    אם מסומן: ברכות נכנסות ל״ממתינים״ ורק אחרי אישור יופיעו באתר
+                  </div>
+                </div>
+              </label>
+
+              <div style={{ height: 12 }} />
+
+              <h3 style={styles.h3}>צבעים</h3>
+              <div style={styles.colorsGrid}>
+                <label style={styles.field}>
+                  <div style={styles.label}>צבע שליחה (ירוק)</div>
+                  <input
+                    type="color"
+                    value={ui.theme.send_color}
+                    onChange={(e) =>
+                      setSettings((s) => ({ ...s, ui: { ...s.ui, theme: { ...s.ui.theme, send_color: e.target.value } } }))
+                    }
+                  />
+                </label>
+
+                <label style={styles.field}>
+                  <div style={styles.label}>צבע כפתורים רגילים</div>
+                  <input
+                    type="color"
+                    value={ui.theme.default_color}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        ui: { ...s.ui, theme: { ...s.ui.theme, default_color: e.target.value } },
+                      }))
+                    }
+                  />
+                </label>
+
+                <label style={styles.field}>
+                  <div style={styles.label}>צבע danger (מחיקה/הסר)</div>
+                  <input
+                    type="color"
+                    value={ui.theme.danger_color}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        ui: { ...s.ui, theme: { ...s.ui.theme, danger_color: e.target.value } },
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+
+              <div style={{ height: 14 }} />
+
+              <h3 style={styles.h3}>כפתורים (הצגה/טקסט/סוג צבע)</h3>
+
+              <ButtonsEditor
+                buttons={ui.buttons}
+                onChange={(next) => setSettings((s) => ({ ...s, ui: { ...s.ui, buttons: next } }))}
+              />
+
+              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                <button style={btn("default")} onClick={loadSettings} disabled={saving}>
+                  רענון הגדרות
+                </button>
+                <button style={btn("primary")} onClick={saveSettings} disabled={saving}>
+                  {saving ? "שומר…" : "שמירה"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ברכות */}
+        <div style={styles.card}>
+          <h2 style={styles.h2}>ברכות</h2>
+
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            <button style={btn("default")} onClick={loadPosts} disabled={loadingPosts}>
+              רענון רשימות
+            </button>
+          </div>
+
+          {loadingPosts ? (
+            <div style={{ opacity: 0.8 }}>טוען ברכות…</div>
+          ) : (
+            <div style={{ display: "grid", gap: 14 }}>
+              <Section
+                title={`ממתינים לאישור (${pending.length})`}
+                rows={pending}
+                primaryActionLabel="אשר"
+                onPrimaryAction={(id) => setApprove(id, true)}
+                secondaryActionLabel="מחק"
+                onSecondaryAction={(id) => deletePost(id)}
+              />
+
+              <Section
+                title={`מאושרים (${approved.length})`}
+                rows={approved}
+                primaryActionLabel="בטל אישור"
+                onPrimaryAction={(id) => setApprove(id, false)}
+                secondaryActionLabel="מחק"
+                onSecondaryAction={(id) => deletePost(id)}
+              />
+            </div>
+          )}
+        </div>
       </div>
+    </div>
+  );
+}
 
-      {err && (
-        <div
-          style={{
-            background: "#4b1f1f",
-            color: "white",
-            padding: 12,
-            borderRadius: 10,
-            marginBottom: 16,
-          }}
-        >
-          {err}
-        </div>
-      )}
+function ButtonsEditor(props: {
+  buttons: SiteSettings["ui"]["buttons"];
+  onChange: (next: SiteSettings["ui"]["buttons"]) => void;
+}) {
+  const { buttons, onChange } = props;
 
-      {loading ? (
-        <div style={{ opacity: 0.8 }}>טוען נתונים…</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Section
-            title={`ממתינים לאישור (${pending.length})`}
-            rows={pending}
-            primaryActionLabel="אשר"
-            onPrimaryAction={(id) => setApprove(id, true)}
-            secondaryActionLabel="מחק"
-            onSecondaryAction={(id) => deletePost(id)}
+  function setBtn<K extends keyof typeof buttons>(key: K, patch: Partial<(typeof buttons)[K]>) {
+    onChange({ ...buttons, [key]: { ...buttons[key], ...patch } });
+  }
+
+  const rows: Array<{ key: keyof typeof buttons; title: string }> = [
+    { key: "upload", title: "כפתור העלאה" },
+    { key: "camera", title: "כפתור מצלמה" },
+    { key: "link", title: "כפתור קישור" },
+    { key: "remove", title: "כפתור הסרת קובץ" },
+    { key: "refresh", title: "כפתור רענון" },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {rows.map((r) => (
+        <div key={r.key} style={styles.btnRow}>
+          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!buttons[r.key].show}
+              onChange={(e) => setBtn(r.key, { show: e.target.checked })}
+            />
+            <b>{r.title}</b>
+          </label>
+
+          <input
+            value={buttons[r.key].label}
+            onChange={(e) => setBtn(r.key, { label: e.target.value })}
+            style={styles.smallInput}
+            placeholder="טקסט כפתור"
           />
 
-          <Section
-            title={`מאושרים (${approved.length})`}
-            rows={approved}
-            primaryActionLabel="בטל אישור"
-            onPrimaryAction={(id) => setApprove(id, false)}
-            secondaryActionLabel="מחק"
-            onSecondaryAction={(id) => deletePost(id)}
-          />
+          <select
+            value={buttons[r.key].color}
+            onChange={(e) => setBtn(r.key, { color: e.target.value as any })}
+            style={styles.smallSelect}
+          >
+            <option value="default">default</option>
+            <option value="danger">danger</option>
+            <option value="send">send</option>
+          </select>
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -154,25 +400,18 @@ function Section(props: {
   const { title, rows, primaryActionLabel, onPrimaryAction, secondaryActionLabel, onSecondaryAction } = props;
 
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 14 }}>
-      <h2 style={{ marginTop: 0, marginBottom: 10 }}>{title}</h2>
+    <div style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 12 }}>
+      <h3 style={{ margin: "0 0 10px 0" }}>{title}</h3>
 
       {rows.length === 0 ? (
         <div style={{ opacity: 0.7 }}>אין רשומות כאן.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "grid", gap: 10 }}>
           {rows.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 14,
-                padding: 12,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <div key={r.id} style={styles.postBox}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontWeight: 800 }}>{r.name}</div>
+                  <div style={{ fontWeight: 900 }}>{r.name}</div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>{formatDate(r.created_at)}</div>
                 </div>
 
@@ -186,18 +425,18 @@ function Section(props: {
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.4 }}>{r.message}</div>
+              <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{r.message}</div>
 
-              {r.link_url && (
+              {r.link_url ? (
                 <div style={{ marginTop: 10 }}>
                   🔗{" "}
-                  <a href={r.link_url} target="_blank" rel="noreferrer">
+                  <a href={r.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
                     {r.link_url}
                   </a>
                 </div>
-              )}
+              ) : null}
 
-              {r.media_url && (
+              {r.media_url ? (
                 <div style={{ marginTop: 10 }}>
                   {r.media_type === "video" ? (
                     <video src={r.media_url} controls style={{ width: "100%", borderRadius: 12 }} />
@@ -205,7 +444,7 @@ function Section(props: {
                     <img src={r.media_url} alt="" style={{ width: "100%", borderRadius: 12 }} />
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
           ))}
         </div>
@@ -214,24 +453,80 @@ function Section(props: {
   );
 }
 
-function btn(kind: "primary" | "danger" | "default" = "default") {
+function btn(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
-    borderRadius: 10,
+    borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 700,
+    fontWeight: 900,
   };
 
-  if (kind === "primary") {
-    base.background = "rgba(46, 204, 113, 0.18)";
-    base.border = "1px solid rgba(46, 204, 113, 0.45)";
-  }
-  if (kind === "danger") {
-    base.background = "rgba(231, 76, 60, 0.18)";
-    base.border = "1px solid rgba(231, 76, 60, 0.45)";
-  }
+  if (kind === "primary") return { ...base, background: "rgba(46, 204, 113, 0.20)", borderColor: "rgba(46, 204, 113, 0.45)" };
+  if (kind === "danger") return { ...base, background: "rgba(231, 76, 60, 0.18)", borderColor: "rgba(231, 76, 60, 0.45)" };
   return base;
-      }
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#0b1020",
+    color: "white",
+    direction: "rtl",
+    padding: 18,
+    maxWidth: 1200,
+    margin: "0 auto",
+  },
+  h1: { margin: 0, fontSize: 30, fontWeight: 900 },
+  sub: { marginTop: 8, opacity: 0.85 },
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 },
+  card: {
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    padding: 14,
+    background: "rgba(255,255,255,0.04)",
+    backdropFilter: "blur(10px)",
+  },
+  h2: { margin: "0 0 12px 0", fontSize: 18, fontWeight: 900 },
+  h3: { margin: "0 0 10px 0", fontSize: 14, fontWeight: 900, opacity: 0.95 },
+  err: { background: "rgba(231, 76, 60, 0.20)", border: "1px solid rgba(231, 76, 60, 0.45)", padding: 10, borderRadius: 12, marginTop: 12 },
+  toast: { background: "rgba(0,0,0,0.75)", border: "1px solid rgba(255,255,255,0.18)", padding: 10, borderRadius: 12, marginTop: 12 },
+  row: { display: "flex", gap: 10, alignItems: "flex-start" },
+  colorsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 },
+  field: { display: "flex", flexDirection: "column", gap: 6 },
+  label: { fontSize: 12, opacity: 0.9, fontWeight: 900 },
+  btnRow: {
+    display: "grid",
+    gridTemplateColumns: "180px 1fr 120px",
+    gap: 10,
+    alignItems: "center",
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    padding: 10,
+  },
+  smallInput: {
+    width: "100%",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(0,0,0,0.25)",
+    color: "white",
+    padding: "10px 10px",
+    outline: "none",
+  },
+  smallSelect: {
+    width: "100%",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(0,0,0,0.25)",
+    color: "white",
+    padding: "10px 10px",
+    outline: "none",
+  },
+  postBox: {
+    border: "1px solid rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    padding: 12,
+  },
+};
