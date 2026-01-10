@@ -173,7 +173,7 @@ export default function HomePage() {
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.h2}>השארת ברכה</h2>
+          <h2 style={styles.h2}>השארת ברכה ✅</h2>
 
           <div style={gridStyle}>
             <label style={styles.field}>
