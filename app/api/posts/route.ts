@@ -4,23 +4,24 @@ import { supabaseServer } from "../../../lib/supabaseServer";
 
 const EDIT_WINDOW_MS = 60 * 60 * 1000; // שעה
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
 function addMsIso(ms: number) {
   return new Date(Date.now() + ms).toISOString();
 }
 
 function getOwnerTokenFromReq(req: Request) {
-  // מגיע מהקליינט (header). אם אין – נחזיר ריק.
   return req.headers.get("x-owner-token") || "";
 }
 
-export async function GET() {
-  const supabase = supabaseServer();
+function isStillEditable(editable_until: string | null) {
+  if (!editable_until) return false;
+  const t = new Date(editable_until).getTime();
+  return Date.now() <= t;
+}
 
-  // מחזירים רק מאושרים (האתר הציבורי)
+export async function GET(req: Request) {
+  const supabase = supabaseServer();
+  const ownerToken = getOwnerTokenFromReq(req); // אופציונלי (אם אין - פשוט לא יהיה can_edit)
+
   const { data, error } = await supabase
     .from("posts")
     .select("id, created_at, name, message, media_url, media_type, link_url, approved, editable_until, owner_token")
@@ -32,21 +33,22 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // למען אבטחה: לא חייבים לחשוף owner_token בציבורי,
-  // אבל כדי להציג כפתורי עריכה לבעלים - אנחנו כן צריכים לדעת אם זו "שלו".
-  // במקום לחשוף owner_token, אנחנו מחזירים boolean: can_edit בקליינט לפי טוקן.
-  // אז כאן נשאיר owner_token מחוץ ל-output.
-  const safe = (data || []).map((p: any) => ({
-    id: p.id,
-    created_at: p.created_at,
-    name: p.name,
-    message: p.message,
-    media_url: p.media_url,
-    media_type: p.media_type,
-    link_url: p.link_url,
-    editable_until: p.editable_until,
-    // לא מחזירים owner_token
-  }));
+  const safe = (data || []).map((p: any) => {
+    const can_edit =
+      !!ownerToken && p.owner_token === ownerToken && isStillEditable(p.editable_until || null);
+
+    return {
+      id: p.id,
+      created_at: p.created_at,
+      name: p.name,
+      message: p.message,
+      media_url: p.media_url,
+      media_type: p.media_type,
+      link_url: p.link_url,
+      editable_until: p.editable_until,
+      can_edit, // ✅ בלי לחשוף owner_token
+    };
+  });
 
   return NextResponse.json({ data: safe }, { status: 200 });
 }
@@ -55,7 +57,6 @@ export async function POST(req: Request) {
   const supabase = supabaseServer();
   const ownerToken = getOwnerTokenFromReq(req);
 
-  // נדרוש טוקן כדי לאפשר עריכה/מחיקה לשעה
   if (!ownerToken) {
     return NextResponse.json({ error: "חסר owner token" }, { status: 400 });
   }
@@ -75,7 +76,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "חובה למלא שם וברכה" }, { status: 400 });
   }
 
-  // העלאת מדיה (אופציונלי)
   let media_url: string | null = null;
   let media_type: "image" | "video" | null = null;
 
@@ -107,11 +107,7 @@ export async function POST(req: Request) {
     media_url = pub?.publicUrl || null;
   }
 
-  // אצלך יכול להיות מנגנון אישור מנהל.
-  // כאן נשאיר: ברירת מחדל "ממתין" (approved=false) אם זה מה שרצית.
-  // אם אצלך כבר יש approved=true מיידית - תחליף פה ל-true.
-  const approved = false;
-
+  const approved = false; // או true אם אתה רוצה אישור מיידי
   const editable_until = addMsIso(EDIT_WINDOW_MS);
 
   const { data, error } = await supabase
@@ -158,7 +154,6 @@ export async function PATCH(req: Request) {
 
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
 
-  // נטען רשומה לבדיקה
   const { data: row, error: getErr } = await supabase
     .from("posts")
     .select("id, owner_token, editable_until")
@@ -167,14 +162,13 @@ export async function PATCH(req: Request) {
 
   if (getErr || !row) return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
 
-  const editableUntil = row.editable_until ? new Date(row.editable_until).getTime() : 0;
-  const stillEditable = Date.now() <= editableUntil;
+  const stillEditable = isStillEditable(row.editable_until || null);
 
   if (row.owner_token !== ownerToken || !stillEditable) {
     return NextResponse.json({ error: "אין הרשאה לעריכה (או שפג הזמן)" }, { status: 403 });
   }
 
-  const patch: any = { updated_at: nowIso() };
+  const patch: any = {};
   if (nextMessage !== null) patch.message = nextMessage;
   if (nextLink !== null) patch.link_url = nextLink || null;
   if (removeMedia) {
@@ -197,7 +191,6 @@ export async function DELETE(req: Request) {
   const id = String(body?.id || "").trim();
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
 
-  // נטען רשומה לבדיקה
   const { data: row, error: getErr } = await supabase
     .from("posts")
     .select("id, owner_token, editable_until")
@@ -206,8 +199,7 @@ export async function DELETE(req: Request) {
 
   if (getErr || !row) return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
 
-  const editableUntil = row.editable_until ? new Date(row.editable_until).getTime() : 0;
-  const stillEditable = Date.now() <= editableUntil;
+  const stillEditable = isStillEditable(row.editable_until || null);
 
   if (row.owner_token !== ownerToken || !stillEditable) {
     return NextResponse.json({ error: "אין הרשאה למחיקה (או שפג הזמן)" }, { status: 403 });
