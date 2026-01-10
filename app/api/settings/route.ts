@@ -1,31 +1,21 @@
+// app/api/settings/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "../../../lib/supabaseServer";
+import { createClient } from "@supabase/supabase-js";
 
-const DEFAULT_UI = {
-  theme: {
-    send_color: "#2ecc71",
-    default_color: "#ff9500",
-    danger_color: "#ff3b30",
-    bg: "#0b1020",
-    card_bg: "rgba(255,255,255,0.04)",
-  },
-  buttons: {
-    upload: { show: true, label: "העלאת תמונה/וידאו", color: "default" },
-    camera: { show: true, label: "📸 צילום תמונה", color: "default" },
-    link: { show: true, label: "🔗 צרף קישור", color: "default" },
-    remove: { show: true, label: "הסר קובץ", color: "danger" },
-    refresh: { show: true, label: "רענון", color: "default" },
-  },
-};
+function supabasePublic() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
 export async function GET() {
-  const supabase = supabaseServer();
+  const supabase = supabasePublic();
+  const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
 
-  const { data, error } = await supabase.from("site_settings").select("value").eq("key", "ui_settings").single();
+  if (error) return NextResponse.json({ ui: null, require_approval: true }, { status: 200 });
 
-  if (error) {
-    return NextResponse.json({ ok: true, ui: DEFAULT_UI }, { status: 200 });
-  }
+  const require_approval = data?.value?.require_approval ?? true;
+  const ui = data?.value?.ui ?? null;
 
-  return NextResponse.json({ ok: true, ui: data?.value || DEFAULT_UI }, { status: 200 });
+  return NextResponse.json({ require_approval, ui }, { status: 200 });
 }
