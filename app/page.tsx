@@ -12,10 +12,24 @@ type PostRow = {
   media_type: "image" | "video" | null;
   link_url: string | null;
   editable_until?: string | null;
+  can_edit?: boolean; // מגיע מה-API
 };
 
-const OWNER_KEY = "ido_owner_token_v1";
-const EDIT_WINDOW_MS = 60 * 60 * 1000;
+const OWNER_TOKEN_KEY = "ido_owner_token_v1";
+
+function getOrCreateOwnerToken() {
+  if (typeof window === "undefined") return "";
+  let t = window.localStorage.getItem(OWNER_TOKEN_KEY);
+  if (!t) {
+    // טוקן אקראי פשוט (מספיק בשביל "בעלים לשעה")
+    t =
+      (crypto?.randomUUID?.() ??
+        `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`) +
+      "";
+    window.localStorage.setItem(OWNER_TOKEN_KEY, t);
+  }
+  return t;
+}
 
 function formatDate(iso: string) {
   try {
@@ -26,22 +40,21 @@ function formatDate(iso: string) {
   }
 }
 
-function getOrCreateOwnerToken() {
-  if (typeof window === "undefined") return "";
-  const existing = window.localStorage.getItem(OWNER_KEY);
-  if (existing) return existing;
-  const token = `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
-  window.localStorage.setItem(OWNER_KEY, token);
-  return token;
-}
-
-function canEditNow(editable_until?: string | null) {
-  if (!editable_until) return false;
-  const t = new Date(editable_until).getTime();
-  return Date.now() <= t;
+function formatTimeLeft(editable_until?: string | null) {
+  if (!editable_until) return "";
+  const ms = new Date(editable_until).getTime() - Date.now();
+  if (ms <= 0) return "פג הזמן";
+  const mins = Math.ceil(ms / 60000);
+  if (mins <= 1) return "דקה";
+  if (mins < 60) return `${mins} דקות`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h}ש ${m}ד` : `${h}ש`;
 }
 
 export default function HomePage() {
+  const [ownerToken, setOwnerToken] = useState("");
+
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,16 +70,13 @@ export default function HomePage() {
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const pickFileRef = useRef<HTMLInputElement | null>(null);
-  const cameraRef = useRef<HTMLInputElement | null>(null);
-
-  const [ownerToken, setOwnerToken] = useState("");
-
-  // מצב עריכה
+  // עריכה
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState("");
-  const [editLinkUrl, setEditLinkUrl] = useState("");
-  const [editRemoveMedia, setEditRemoveMedia] = useState(false);
+  const [editLink, setEditLink] = useState("");
+
+  const pickFileRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setOwnerToken(getOrCreateOwnerToken());
@@ -84,10 +94,16 @@ export default function HomePage() {
     window.setTimeout(() => setToast(null), 3500);
   }
 
+  async function apiFetch(input: RequestInfo, init?: RequestInit) {
+    const headers = new Headers(init?.headers || {});
+    if (ownerToken) headers.set("x-owner-token", ownerToken);
+    return fetch(input, { ...init, headers });
+  }
+
   async function loadPosts() {
     setLoading(true);
     try {
-      const res = await fetch("/api/posts", { cache: "no-store" });
+      const res = await apiFetch("/api/posts", { cache: "no-store" as any });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בטעינה");
       setPosts(Array.isArray(j?.data) ? j.data : []);
@@ -99,8 +115,10 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    if (!ownerToken) return;
     loadPosts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerToken]);
 
   function onSelectFile(f: File | null) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -121,14 +139,9 @@ export default function HomePage() {
       return;
     }
 
-    const finalLink = showLink ? linkUrl.trim() : "";
-    if (finalLink && !/^https?:\/\//i.test(finalLink)) {
+    const link = linkUrl.trim();
+    if (showLink && link && !/^https?:\/\//i.test(link)) {
       showToast("הלינק חייב להתחיל ב-http/https");
-      return;
-    }
-
-    if (!ownerToken) {
-      showToast("שגיאה: אין owner token (רענן דף)");
       return;
     }
 
@@ -137,14 +150,11 @@ export default function HomePage() {
       const form = new FormData();
       form.append("name", name.trim());
       form.append("message", message.trim());
-      if (finalLink) form.append("link_url", finalLink);
+      if (showLink && link) form.append("link_url", link);
       if (file) form.append("media", file);
 
-      const res = await fetch("/api/posts", {
+      const res = await apiFetch("/api/posts", {
         method: "POST",
-        headers: {
-          "x-owner-token": ownerToken,
-        },
         body: form,
       });
 
@@ -159,8 +169,8 @@ export default function HomePage() {
 
       setName("");
       setMessage("");
-      setShowLink(false);
       setLinkUrl("");
+      setShowLink(false);
       onSelectFile(null);
 
       await loadPosts();
@@ -172,90 +182,70 @@ export default function HomePage() {
   }
 
   function startEdit(p: PostRow) {
-    // חשוב: אנחנו לא יודעים בוודאות שהוא "בעלים" כי אנחנו לא מחזירים owner_token מהשרת.
-    // לכן הכפתורים מוצגים לפי editable_until בלבד, והשרת יאשר/יחסום לפי token בפועל.
     setEditingId(p.id);
     setEditMessage(p.message || "");
-    setEditLinkUrl(p.link_url || "");
-    setEditRemoveMedia(false);
+    setEditLink(p.link_url || "");
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditMessage("");
-    setEditLinkUrl("");
-    setEditRemoveMedia(false);
+    setEditLink("");
   }
 
   async function saveEdit(id: string) {
-    if (!ownerToken) {
-      showToast("שגיאה: אין owner token");
+    const nextMsg = editMessage.trim();
+    const nextL = editLink.trim();
+
+    if (!nextMsg) {
+      showToast("הברכה לא יכולה להיות ריקה");
       return;
     }
-    if (!editMessage.trim()) {
-      showToast("אי אפשר להשאיר ברכה ריקה");
-      return;
-    }
-    if (editLinkUrl.trim() && !/^https?:\/\//i.test(editLinkUrl.trim())) {
+    if (nextL && !/^https?:\/\//i.test(nextL)) {
       showToast("הלינק חייב להתחיל ב-http/https");
       return;
     }
 
-    setSubmitting(true);
     try {
-      const res = await fetch("/api/posts", {
+      const res = await apiFetch("/api/posts", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-owner-token": ownerToken,
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id,
-          message: editMessage.trim(),
-          link_url: editLinkUrl.trim(),
-          remove_media: editRemoveMedia,
+          message: nextMsg,
+          link_url: nextL,
         }),
       });
+
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.error || "שגיאה בעריכה");
+      if (!res.ok) throw new Error(j?.error || "שגיאה בשמירה");
 
       showToast("עודכן ✅");
       cancelEdit();
       await loadPosts();
     } catch (e: any) {
-      showToast(e?.message || "שגיאה בעריכה");
-    } finally {
-      setSubmitting(false);
+      showToast(e?.message || "שגיאה בשמירה");
     }
   }
 
   async function deletePost(id: string) {
-    if (!confirm("למחוק את הברכה?")) return;
-    if (!ownerToken) {
-      showToast("שגיאה: אין owner token");
-      return;
-    }
+    const ok = window.confirm("למחוק את הברכה? זה בלתי הפיך.");
+    if (!ok) return;
 
-    setSubmitting(true);
     try {
-      const res = await fetch("/api/posts", {
+      const res = await apiFetch("/api/posts", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          "x-owner-token": ownerToken,
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ id }),
       });
+
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה במחיקה");
 
       showToast("נמחק ✅");
-      cancelEdit();
       await loadPosts();
     } catch (e: any) {
       showToast(e?.message || "שגיאה במחיקה");
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -265,20 +255,27 @@ export default function HomePage() {
     <main style={styles.page}>
       <div style={styles.container}>
         <header style={styles.header}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <h1 style={styles.h1}>בר מצווה 🎉</h1>
+          <div style={styles.headerTop}>
+            <h1 style={styles.h1}>🎉 בר מצווה</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.</p>
+          <p style={styles.sub}>
+            כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו, או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.
+          </p>
         </header>
 
         <section style={styles.card}>
           <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={styles.grid}>
+          <div style={styles.formGrid}>
             <label style={styles.field}>
               <div style={styles.label}>שם</div>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="לדוגמה: פרי" style={styles.input} />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="לדוגמה: פרי"
+                style={styles.input}
+              />
             </label>
 
             <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
@@ -292,25 +289,34 @@ export default function HomePage() {
               />
             </label>
 
-            {/* קישור מתחת לשדה ברכה, ורק אם הופעל */}
             {showLink ? (
               <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
                 <div style={styles.label}>קישור (אופציונלי)</div>
-                <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." style={styles.input} />
+                <input
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://..."
+                  style={styles.input}
+                />
               </label>
             ) : null}
           </div>
 
-          {/* כפתורים מותאמים למובייל: אחידים ורוחב מלא */}
-          <div style={styles.actions}>
-            <button type="button" onClick={() => pickFileRef.current?.click()} style={styles.btnFull} disabled={submitting}>
+          {/* כפתורים - מותאם מובייל */}
+          <div style={styles.actionsWrap}>
+            <button
+              type="button"
+              onClick={() => pickFileRef.current?.click()}
+              style={btn("default")}
+              disabled={submitting}
+            >
               העלאת תמונה/וידאו
             </button>
 
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              style={{ ...styles.btnFull, ...styles.btnGreen }}
+              style={btn("primary")}
               disabled={submitting}
               title="במובייל זה יפתח את המצלמה"
             >
@@ -320,24 +326,36 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => setShowLink((v) => !v)}
-              style={styles.btnFull}
+              style={btn("default")}
               disabled={submitting}
             >
-              {showLink ? "הסר קישור" : "צרף קישור"}
+              🔗 צרף קישור
             </button>
 
             {file ? (
-              <button type="button" onClick={() => onSelectFile(null)} style={{ ...styles.btnFull, ...styles.btnRed }} disabled={submitting}>
+              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
                 הסר קובץ
               </button>
             ) : null}
 
-            <button type="button" onClick={submit} style={{ ...styles.btnFull, ...styles.btnGreen }} disabled={submitting}>
-              {submitting ? "שולח…" : "שליחה"}
+            {/* רענון + שליחה */}
+            <button
+              type="button"
+              onClick={loadPosts}
+              style={btn("default")}
+              disabled={loading || submitting}
+              title="טוען מחדש את רשימת הברכות מהשרת"
+            >
+              רענון
             </button>
 
-            <button type="button" onClick={loadPosts} style={styles.btnFull} disabled={loading || submitting}>
-              רענון
+            <button
+              type="button"
+              onClick={submit}
+              style={submitting ? btn("disabled") : btn("primary")}
+              disabled={submitting}
+            >
+              {submitting ? "שולח…" : "שליחה"}
             </button>
 
             {/* קלט רגיל (קבצים) */}
@@ -363,9 +381,17 @@ export default function HomePage() {
           {previewUrl ? (
             <div style={{ marginTop: 14 }}>
               <div style={{ opacity: 0.8, marginBottom: 8 }}>תצוגה מקדימה:</div>
-              {file?.type?.startsWith("video/") ? <video src={previewUrl} controls style={styles.media} /> : <img src={previewUrl} alt="" style={styles.media} />}
+              {file?.type?.startsWith("video/") ? (
+                <video src={previewUrl} controls style={styles.media} />
+              ) : (
+                <img src={previewUrl} alt="" style={styles.media} />
+              )}
             </div>
           ) : null}
+
+          <div style={styles.smallNote}>
+            ✨ טיפ: מי ששלח ברכה יכול לערוך/למחוק אותה למשך שעה מרגע השליחה (רק מאותו מכשיר).
+          </div>
         </section>
 
         <section style={styles.card}>
@@ -378,36 +404,50 @@ export default function HomePage() {
           ) : (
             <div style={styles.list}>
               {posts.map((p) => {
-                const editable = canEditNow(p.editable_until || null);
                 const isEditing = editingId === p.id;
+                const canEdit = !!p.can_edit;
 
                 return (
                   <article key={p.id} style={styles.postCard}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div style={styles.postTop}>
                       <div>
-                        <div style={{ fontWeight: 900, fontSize: 16 }}>{p.name}</div>
-                        <div style={{ opacity: 0.7, fontSize: 12 }}>{formatDate(p.created_at)}</div>
+                        <div style={styles.postName}>{p.name}</div>
+                        <div style={styles.postMeta}>
+                          {formatDate(p.created_at)}
+                          {canEdit ? (
+                            <span style={styles.editBadge}>עריכה זמינה: {formatTimeLeft(p.editable_until)}</span>
+                          ) : null}
+                        </div>
                       </div>
 
-                      {/* פעולות למי ששלח - לשעה בלבד (השרת יאמת לפי token) */}
-                      {editable ? (
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button type="button" onClick={() => startEdit(p)} style={miniBtn()}>
-                            ✏️ עריכה
-                          </button>
-                          <button type="button" onClick={() => deletePost(p.id)} style={miniBtn("danger")}>
-                            🗑️ מחיקה
-                          </button>
+                      {canEdit ? (
+                        <div style={styles.postBtns}>
+                          {isEditing ? (
+                            <>
+                              <button type="button" style={btnSmall("default")} onClick={cancelEdit}>
+                                ביטול
+                              </button>
+                              <button type="button" style={btnSmall("primary")} onClick={() => saveEdit(p.id)}>
+                                שמירה
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" style={btnSmall("default")} onClick={() => startEdit(p)}>
+                                עריכה
+                              </button>
+                              <button type="button" style={btnSmall("danger")} onClick={() => deletePost(p.id)}>
+                                מחיקה
+                              </button>
+                            </>
+                          )}
                         </div>
                       ) : null}
                     </div>
 
                     {isEditing ? (
-                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                        <div style={{ fontSize: 12, opacity: 0.8 }}>
-                          אפשר לערוך/למחוק עד שעה אחרי השליחה. אם ייחסם – זה בגלל שפג הזמן או שזה לא אותו מכשיר.
-                        </div>
-
+                      <div style={{ marginTop: 10 }}>
+                        <div style={styles.label}>עריכת ברכה</div>
                         <textarea
                           value={editMessage}
                           onChange={(e) => setEditMessage(e.target.value)}
@@ -415,36 +455,23 @@ export default function HomePage() {
                           rows={4}
                         />
 
+                        <div style={{ height: 10 }} />
+
+                        <div style={styles.label}>עריכת קישור (אופציונלי)</div>
                         <input
-                          value={editLinkUrl}
-                          onChange={(e) => setEditLinkUrl(e.target.value)}
+                          value={editLink}
+                          onChange={(e) => setEditLink(e.target.value)}
                           placeholder="https://..."
                           style={styles.input}
                         />
 
-                        {p.media_url ? (
-                          <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, opacity: 0.95 }}>
-                            <input
-                              type="checkbox"
-                              checked={editRemoveMedia}
-                              onChange={(e) => setEditRemoveMedia(e.target.checked)}
-                            />
-                            להסיר מדיה מהברכה (תמונה/וידאו)
-                          </label>
-                        ) : null}
-
-                        <div style={{ display: "flex", gap: 10 }}>
-                          <button type="button" onClick={() => saveEdit(p.id)} style={miniBtn("primary")} disabled={submitting}>
-                            שמירה ✅
-                          </button>
-                          <button type="button" onClick={cancelEdit} style={miniBtn()} disabled={submitting}>
-                            ביטול
-                          </button>
+                        <div style={styles.editHelp}>
+                          לשינוי תמונה/וידאו: כרגע הכי פשוט למחוק את הברכה ולשלוח מחדש עם המדיה הנכונה.
                         </div>
                       </div>
                     ) : (
                       <>
-                        <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{p.message}</div>
+                        <div style={styles.postMessage}>{p.message}</div>
 
                         {p.link_url ? (
                           <div style={{ marginTop: 10 }}>
@@ -479,45 +506,88 @@ export default function HomePage() {
   );
 }
 
-function miniBtn(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
+function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): React.CSSProperties {
   const base: React.CSSProperties = {
-    padding: "8px 10px",
-    borderRadius: 10,
+    padding: "12px 12px",
+    borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 12,
+    fontWeight: 800,
+    width: "100%",
   };
-  if (kind === "primary") return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
-  if (kind === "danger") return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
+
+  if (kind === "primary") {
+    return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
+  }
+  if (kind === "danger") {
+    return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
+  }
+  if (kind === "disabled") {
+    return { ...base, opacity: 0.45, cursor: "not-allowed" };
+  }
+  return base;
+}
+
+function btnSmall(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
+  const base: React.CSSProperties = {
+    padding: "10px 10px",
+    borderRadius: 12,
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: 800,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  };
+
+  if (kind === "primary") {
+    return { ...base, background: "rgba(46, 204, 113, 0.18)", borderColor: "rgba(46, 204, 113, 0.45)" };
+  }
+  if (kind === "danger") {
+    return { ...base, background: "rgba(231, 76, 60, 0.18)", borderColor: "rgba(231, 76, 60, 0.45)" };
+  }
   return base;
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
+    background:
+      "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
     color: "white",
     direction: "rtl",
-    padding: 14,
+    padding: 16,
   },
   container: {
-    maxWidth: 980,
+    maxWidth: 720,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    gap: 14,
+    gap: 16,
   },
   header: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
     background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
-  h1: { margin: 0, fontSize: 28, letterSpacing: 0.2 },
+  headerTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  h1: {
+    margin: 0,
+    fontSize: 26,
+    letterSpacing: 0.2,
+    fontWeight: 900,
+  },
   badge: {
     padding: "6px 10px",
     borderRadius: 999,
@@ -525,22 +595,43 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,0.06)",
     fontSize: 12,
     opacity: 0.95,
+    fontWeight: 800,
   },
-  sub: { margin: "8px 0 0 0", opacity: 0.85, lineHeight: 1.5 },
+  sub: {
+    margin: "10px 0 0 0",
+    opacity: 0.85,
+    lineHeight: 1.6,
+  },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
     background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
-  h2: { margin: "0 0 12px 0", fontSize: 18 },
-  grid: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
-  field: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { opacity: 0.85, fontSize: 13 },
+  h2: {
+    margin: "0 0 12px 0",
+    fontSize: 18,
+    fontWeight: 900,
+  },
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 12,
+  },
+  field: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  label: {
+    opacity: 0.9,
+    fontSize: 13,
+    fontWeight: 800,
+  },
   input: {
     width: "100%",
-    borderRadius: 12,
+    borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
@@ -549,7 +640,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   textarea: {
     width: "100%",
-    borderRadius: 12,
+    borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
@@ -557,33 +648,23 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     resize: "vertical",
   },
-
-  actions: {
+  actionsWrap: {
     marginTop: 12,
     display: "grid",
-    gridTemplateColumns: "1fr",
+    gridTemplateColumns: "1fr 1fr",
     gap: 10,
   },
-  btnFull: {
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.06)",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: 800,
+  smallNote: {
+    marginTop: 12,
+    opacity: 0.8,
+    fontSize: 12,
+    lineHeight: 1.5,
   },
-  btnGreen: {
-    background: "rgba(46, 204, 113, 0.22)",
-    borderColor: "rgba(46, 204, 113, 0.45)",
+  list: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 12,
   },
-  btnRed: {
-    background: "rgba(231, 76, 60, 0.20)",
-    borderColor: "rgba(231, 76, 60, 0.45)",
-  },
-
-  list: { display: "grid", gridTemplateColumns: "1fr", gap: 12 },
   postCard: {
     border: "1px solid rgba(255,255,255,0.12)",
     background: "rgba(255,255,255,0.03)",
@@ -591,7 +672,54 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 14,
     overflow: "hidden",
   },
-  media: { width: "100%", borderRadius: 14, display: "block" },
+  postTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  postName: {
+    fontWeight: 900,
+    fontSize: 16,
+  },
+  postMeta: {
+    opacity: 0.75,
+    fontSize: 12,
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 2,
+  },
+  editBadge: {
+    padding: "3px 8px",
+    borderRadius: 999,
+    border: "1px solid rgba(46, 204, 113, 0.45)",
+    background: "rgba(46, 204, 113, 0.16)",
+    fontWeight: 900,
+  },
+  postBtns: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  postMessage: {
+    marginTop: 10,
+    whiteSpace: "pre-wrap",
+    lineHeight: 1.6,
+  },
+  editHelp: {
+    marginTop: 10,
+    opacity: 0.8,
+    fontSize: 12,
+    lineHeight: 1.5,
+  },
+  media: {
+    width: "100%",
+    borderRadius: 14,
+    display: "block",
+  },
   toast: {
     position: "fixed",
     left: 16,
@@ -607,5 +735,6 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     zIndex: 50,
     backdropFilter: "blur(8px)",
+    fontWeight: 900,
   },
 };
