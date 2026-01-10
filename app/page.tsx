@@ -15,6 +15,41 @@ type PostRow = {
   can_edit?: boolean; // מגיע מה-API
 };
 
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type UISettings = {
+  theme: {
+    send_color: string; // שליחה (ירוק)
+    default_color: string; // ברירת מחדל (לרוב כתום)
+    danger_color: string; // מחיקה/הסר
+    bg: string; // צבע רקע
+    card_bg: string; // רקע כרטיס
+  };
+  buttons: {
+    upload: UIButtonCfg;
+    camera: UIButtonCfg;
+    link: UIButtonCfg;
+    remove: UIButtonCfg;
+    refresh: UIButtonCfg;
+  };
+};
+
+const DEFAULT_UI: UISettings = {
+  theme: {
+    send_color: "#2ecc71",
+    default_color: "#ff9500",
+    danger_color: "#ff3b30",
+    bg: "#0b1020",
+    card_bg: "rgba(255,255,255,0.04)",
+  },
+  buttons: {
+    upload: { show: true, label: "העלאת תמונה/וידאו", color: "default" },
+    camera: { show: true, label: "📸 צילום תמונה", color: "default" },
+    link: { show: true, label: "🔗 צרף קישור", color: "default" },
+    remove: { show: true, label: "הסר קובץ", color: "danger" },
+    refresh: { show: true, label: "רענון", color: "default" },
+  },
+};
+
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
 
 function getOrCreateOwnerToken() {
@@ -50,8 +85,40 @@ function formatTimeLeft(editable_until?: string | null) {
   return m ? `${h}ש ${m}ד` : `${h}ש`;
 }
 
+function safeMergeUI(remote: any): UISettings {
+  if (!remote || typeof remote !== "object") return DEFAULT_UI;
+
+  const theme = { ...DEFAULT_UI.theme, ...(remote.theme || {}) };
+  const buttons = {
+    upload: { ...DEFAULT_UI.buttons.upload, ...(remote.buttons?.upload || {}) },
+    camera: { ...DEFAULT_UI.buttons.camera, ...(remote.buttons?.camera || {}) },
+    link: { ...DEFAULT_UI.buttons.link, ...(remote.buttons?.link || {}) },
+    remove: { ...DEFAULT_UI.buttons.remove, ...(remote.buttons?.remove || {}) },
+    refresh: { ...DEFAULT_UI.buttons.refresh, ...(remote.buttons?.refresh || {}) },
+  };
+
+  // validate color enums
+  (Object.keys(buttons) as Array<keyof UISettings["buttons"]>).forEach((k) => {
+    const c = (buttons[k] as any)?.color;
+    if (c !== "default" && c !== "danger" && c !== "send") {
+      (buttons[k] as any).color = DEFAULT_UI.buttons[k].color;
+    }
+    if (typeof (buttons[k] as any).show !== "boolean") {
+      (buttons[k] as any).show = DEFAULT_UI.buttons[k].show;
+    }
+    if (typeof (buttons[k] as any).label !== "string") {
+      (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
+    }
+  });
+
+  return { theme, buttons };
+}
+
 export default function HomePage() {
   const [ownerToken, setOwnerToken] = useState("");
+
+  const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
+  const [uiLoaded, setUiLoaded] = useState(false);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,10 +143,12 @@ export default function HomePage() {
   const pickFileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
 
+  // token למכשיר
   useEffect(() => {
     setOwnerToken(getOrCreateOwnerToken());
   }, []);
 
+  // ניקוי preview url
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -98,6 +167,19 @@ export default function HomePage() {
     return fetch(input, { ...init, headers });
   }
 
+  async function loadUI() {
+    try {
+      const res = await fetch("/api/settings", { cache: "no-store" as any });
+      const j = await res.json().catch(() => ({}));
+      const next = safeMergeUI(j?.ui);
+      setUi(next);
+    } catch {
+      // נשארים על DEFAULT_UI
+    } finally {
+      setUiLoaded(true);
+    }
+  }
+
   async function loadPosts() {
     setLoading(true);
     try {
@@ -111,6 +193,10 @@ export default function HomePage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    loadUI();
+  }, []);
 
   useEffect(() => {
     if (!ownerToken) return;
@@ -249,20 +335,32 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
+  // ---------- צבעי כפתורים מהניהול ----------
+  function resolveBtnKind(cfg: UIButtonCfg, force?: "send") {
+    if (force === "send") return "send";
+    if (cfg.color === "send") return "send";
+    if (cfg.color === "danger") return "danger";
+    return "default";
+  }
+
   return (
-    <main style={styles.page}>
+    <main
+      style={{
+        ...styles.page,
+        background:
+          `radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), ${ui.theme.bg}`,
+      }}
+    >
       <div style={styles.container}>
-        <header style={styles.header}>
+        <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
             <h1 style={styles.h1}>🎉 בר מצווה</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>
-            כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו, או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.
-          </p>
+          <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
         </header>
 
-        <section style={styles.card}>
+        <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
 
           <div style={styles.formGrid}>
@@ -300,65 +398,70 @@ export default function HomePage() {
             ) : null}
           </div>
 
-          {/* כפתורים */}
+          {/* כפתורים - מותאם מובייל */}
           <div style={styles.actionsWrap}>
-            {/* שורה 1 */}
-            <button
-              type="button"
-              onClick={() => pickFileRef.current?.click()}
-              style={btn("default")}
-              disabled={submitting}
-            >
-              העלאת תמונה/וידאו
-            </button>
-
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              style={btn("default")}
-              disabled={submitting}
-              title="במובייל זה יפתח את המצלמה"
-            >
-              📸 צילום תמונה
-            </button>
-
-            {/* שורה 2 */}
-            <button
-              type="button"
-              onClick={() => setShowLink((v) => !v)}
-              style={btn("default")}
-              disabled={submitting}
-            >
-              🔗 צרף קישור
-            </button>
-
-            <button
-              type="button"
-              onClick={loadPosts}
-              style={btn("default")}
-              disabled={loading || submitting}
-              title="טוען מחדש את רשימת הברכות מהשרת"
-            >
-              רענון
-            </button>
-
-            {/* שורה 3 */}
-            {file ? (
-              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
-                הסר קובץ
+            {ui.buttons.upload.show ? (
+              <button
+                type="button"
+                onClick={() => pickFileRef.current?.click()}
+                style={btn(resolveBtnKind(ui.buttons.upload), ui)}
+                disabled={submitting}
+              >
+                {ui.buttons.upload.label}
               </button>
-            ) : (
-              <div style={{ opacity: 0 }} />
-            )}
+            ) : null}
 
-            {/* שליחה לבד בשורה (רוחב מלא) */}
+            {ui.buttons.camera.show ? (
+              <button
+                type="button"
+                onClick={() => cameraRef.current?.click()}
+                style={btn(resolveBtnKind(ui.buttons.camera), ui)}
+                disabled={submitting}
+                title="במובייל זה יפתח את המצלמה"
+              >
+                {ui.buttons.camera.label}
+              </button>
+            ) : null}
+
+            {ui.buttons.link.show ? (
+              <button
+                type="button"
+                onClick={() => setShowLink((v) => !v)}
+                style={btn(resolveBtnKind(ui.buttons.link), ui)}
+                disabled={submitting}
+              >
+                {showLink ? "❌ הסתר קישור" : ui.buttons.link.label}
+              </button>
+            ) : null}
+
+            {file && ui.buttons.remove.show ? (
+              <button
+                type="button"
+                onClick={() => onSelectFile(null)}
+                style={btn(resolveBtnKind(ui.buttons.remove), ui)}
+                disabled={submitting}
+              >
+                {ui.buttons.remove.label}
+              </button>
+            ) : null}
+
+            {ui.buttons.refresh.show ? (
+              <button
+                type="button"
+                onClick={loadPosts}
+                style={btn(resolveBtnKind(ui.buttons.refresh), ui)}
+                disabled={loading || submitting}
+                title="טוען מחדש את רשימת הברכות מהשרת"
+              >
+                {ui.buttons.refresh.label}
+              </button>
+            ) : null}
+
+            {/* שליחה תמיד ירוק */}
             <button
               type="button"
               onClick={submit}
-              style={{
-                ...(submitting ? btn("disabled") : btn("primary")),
-                ...styles.actionsRowFull,
-              }}
+              style={submitting ? btn("disabled", ui) : btn("send", ui)}
               disabled={submitting}
             >
               {submitting ? "שולח…" : "שליחה"}
@@ -398,9 +501,12 @@ export default function HomePage() {
           <div style={styles.smallNote}>
             ✨ טיפ: מי ששלח ברכה יכול לערוך/למחוק אותה למשך שעה מרגע השליחה (רק מאותו מכשיר).
           </div>
+
+          {/* רמז קטן – אם לא הצליח לטעון settings */}
+          {!uiLoaded ? <div style={{ marginTop: 10, opacity: 0.7, fontSize: 12 }}>טוען הגדרות עיצוב…</div> : null}
         </section>
 
-        <section style={styles.card}>
+        <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>ברכות מאושרות</h2>
 
           {loading ? (
@@ -430,19 +536,19 @@ export default function HomePage() {
                         <div style={styles.postBtns}>
                           {isEditing ? (
                             <>
-                              <button type="button" style={btnSmall("default")} onClick={cancelEdit}>
+                              <button type="button" style={btnSmall("default", ui)} onClick={cancelEdit}>
                                 ביטול
                               </button>
-                              <button type="button" style={btnSmall("primary")} onClick={() => saveEdit(p.id)}>
+                              <button type="button" style={btnSmall("send", ui)} onClick={() => saveEdit(p.id)}>
                                 שמירה
                               </button>
                             </>
                           ) : (
                             <>
-                              <button type="button" style={btnSmall("default")} onClick={() => startEdit(p)}>
+                              <button type="button" style={btnSmall("default", ui)} onClick={() => startEdit(p)}>
                                 עריכה
                               </button>
-                              <button type="button" style={btnSmall("danger")} onClick={() => deletePost(p.id)}>
+                              <button type="button" style={btnSmall("danger", ui)} onClick={() => deletePost(p.id)}>
                                 מחיקה
                               </button>
                             </>
@@ -512,13 +618,12 @@ export default function HomePage() {
   );
 }
 
-/**
- * צבעים:
- * - primary (שליחה): ירוק
- * - default: כתום
- * - danger: אדום
- */
-function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): React.CSSProperties {
+/** ---------- Buttons (theme-aware) ---------- **/
+
+function btn(
+  kind: "send" | "danger" | "default" | "disabled",
+  ui: UISettings
+): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
     borderRadius: 14,
@@ -530,25 +635,22 @@ function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): R
     width: "100%",
   };
 
-  if (kind === "primary") {
-    // ירוק - רק שליחה
-    return { ...base, background: "rgba(46, 204, 113, 0.22)", borderColor: "rgba(46, 204, 113, 0.45)" };
+  if (kind === "send") {
+    return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
   }
-
   if (kind === "danger") {
-    // אדום - הסר קובץ
-    return { ...base, background: "rgba(231, 76, 60, 0.20)", borderColor: "rgba(231, 76, 60, 0.45)" };
+    return { ...base, background: ui.theme.danger_color, borderColor: "rgba(255,255,255,0.25)" };
   }
-
   if (kind === "disabled") {
     return { ...base, opacity: 0.45, cursor: "not-allowed" };
   }
-
-  // כתום - כל השאר
-  return { ...base, background: "rgba(255, 153, 0, 0.22)", borderColor: "rgba(255, 153, 0, 0.50)" };
+  return { ...base, background: ui.theme.default_color, borderColor: "rgba(255,255,255,0.25)" };
 }
 
-function btnSmall(kind: "primary" | "danger" | "default" = "default"): React.CSSProperties {
+function btnSmall(
+  kind: "send" | "danger" | "default",
+  ui: UISettings
+): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 10px",
     borderRadius: 12,
@@ -561,23 +663,16 @@ function btnSmall(kind: "primary" | "danger" | "default" = "default"): React.CSS
     whiteSpace: "nowrap",
   };
 
-  if (kind === "primary") {
-    // שמירה - ירקרק עדין
-    return { ...base, background: "rgba(46, 204, 113, 0.18)", borderColor: "rgba(46, 204, 113, 0.45)" };
-  }
-  if (kind === "danger") {
-    return { ...base, background: "rgba(231, 76, 60, 0.18)", borderColor: "rgba(231, 76, 60, 0.45)" };
-  }
-
-  // כתום - ברירת מחדל (עריכה/ביטול)
-  return { ...base, background: "rgba(255, 153, 0, 0.18)", borderColor: "rgba(255, 153, 0, 0.45)" };
+  if (kind === "send") return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
+  if (kind === "danger") return { ...base, background: ui.theme.danger_color, borderColor: "rgba(255,255,255,0.25)" };
+  return { ...base, background: ui.theme.default_color, borderColor: "rgba(255,255,255,0.25)" };
 }
+
+/** ---------- Styles ---------- **/
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
     color: "white",
     direction: "rtl",
     padding: 16,
@@ -593,7 +688,6 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
     padding: 16,
-    background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
   headerTop: {
@@ -607,7 +701,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: 26,
     letterSpacing: 0.2,
-    fontWeight: 950,
+    fontWeight: 900,
   },
   badge: {
     padding: "6px 10px",
@@ -620,20 +714,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sub: {
     margin: "10px 0 0 0",
-    opacity: 0.85,
+    opacity: 0.9,
     lineHeight: 1.6,
   },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
     padding: 16,
-    background: "rgba(255,255,255,0.04)",
     backdropFilter: "blur(10px)",
   },
   h2: {
     margin: "0 0 12px 0",
     fontSize: 18,
-    fontWeight: 950,
+    fontWeight: 900,
   },
   formGrid: {
     display: "grid",
@@ -646,7 +739,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 6,
   },
   label: {
-    opacity: 0.9,
+    opacity: 0.95,
     fontSize: 13,
     fontWeight: 900,
   },
@@ -669,20 +762,15 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     resize: "vertical",
   },
-
   actionsWrap: {
     marginTop: 12,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: 10,
   },
-  actionsRowFull: {
-    gridColumn: "1 / -1",
-  },
-
   smallNote: {
     marginTop: 12,
-    opacity: 0.8,
+    opacity: 0.85,
     fontSize: 12,
     lineHeight: 1.5,
   },
@@ -706,11 +794,11 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: "wrap",
   },
   postName: {
-    fontWeight: 950,
+    fontWeight: 900,
     fontSize: 16,
   },
   postMeta: {
-    opacity: 0.75,
+    opacity: 0.78,
     fontSize: 12,
     display: "flex",
     gap: 10,
@@ -721,9 +809,9 @@ const styles: Record<string, React.CSSProperties> = {
   editBadge: {
     padding: "3px 8px",
     borderRadius: 999,
-    border: "1px solid rgba(46, 204, 113, 0.45)",
-    background: "rgba(46, 204, 113, 0.16)",
-    fontWeight: 950,
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "rgba(255,255,255,0.10)",
+    fontWeight: 900,
   },
   postBtns: {
     display: "flex",
@@ -737,7 +825,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editHelp: {
     marginTop: 10,
-    opacity: 0.8,
+    opacity: 0.85,
     fontSize: 12,
     lineHeight: 1.5,
   },
@@ -761,6 +849,6 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     zIndex: 50,
     backdropFilter: "blur(8px)",
-    fontWeight: 950,
+    fontWeight: 900,
   },
 };
