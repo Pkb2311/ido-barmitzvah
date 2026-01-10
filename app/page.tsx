@@ -273,7 +273,7 @@ export default function HomePage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="לדוגמה: פרי"
+                placeholder="לדוגמה: ישראל ישראלי"
                 style={styles.input}
               />
             </label>
@@ -316,7 +316,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              style={btn("primary")}
+              style={btn("default")}
               disabled={submitting}
               title="במובייל זה יפתח את המצלמה"
             >
