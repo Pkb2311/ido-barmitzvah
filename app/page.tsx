@@ -29,11 +29,9 @@ export default function HomePage() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
 
-  // קישור
   const [showLink, setShowLink] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
 
-  // מדיה
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -86,17 +84,15 @@ export default function HomePage() {
     setPreviewUrl(URL.createObjectURL(f));
   }
 
-  function clearLink() {
-    setLinkUrl("");
-    setShowLink(false);
-  }
-
   async function submit() {
     if (!name.trim() || !message.trim()) {
       showToast("חובה למלא שם וברכה");
       return;
     }
-    if (linkUrl.trim() && !/^https?:\/\//i.test(linkUrl.trim())) {
+
+    const link = linkUrl.trim();
+
+    if (showLink && link && !/^https?:\/\//i.test(link)) {
       showToast("הלינק חייב להתחיל ב-http/https");
       return;
     }
@@ -106,7 +102,8 @@ export default function HomePage() {
       const form = new FormData();
       form.append("name", name.trim());
       form.append("message", message.trim());
-      if (linkUrl.trim()) form.append("link_url", linkUrl.trim());
+
+      if (showLink && link) form.append("link_url", link);
       if (file) form.append("media", file);
 
       const res = await fetch("/api/posts", {
@@ -125,7 +122,8 @@ export default function HomePage() {
 
       setName("");
       setMessage("");
-      clearLink();
+      setLinkUrl("");
+      setShowLink(false);
       onSelectFile(null);
 
       await loadPosts();
@@ -138,7 +136,8 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
-  const linkInvalid = linkUrl.trim() && !/^https?:\/\//i.test(linkUrl.trim());
+  const disableActions = submitting;
+  const canSubmit = !submitting;
 
   return (
     <main style={styles.page}>
@@ -149,14 +148,14 @@ export default function HomePage() {
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
           <p style={styles.sub}>
-            כתבו ברכה לעידו, אפשר גם לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.
+            כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או קישור. במובייל תוכלו גם לצלם ישר מהדף.
           </p>
         </header>
 
         <section style={styles.card}>
           <h2 style={styles.h2}>השארת ברכה</h2>
 
-          <div style={styles.grid}>
+          <div style={styles.formStack}>
             <label style={styles.field}>
               <div style={styles.label}>שם</div>
               <input
@@ -167,10 +166,7 @@ export default function HomePage() {
               />
             </label>
 
-            {/* השדה השני ברשת נשאר פנוי כדי לא "להרוס" פריסה */}
-            <div />
-
-            <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
+            <label style={styles.field}>
               <div style={styles.label}>ברכה</div>
               <textarea
                 value={message}
@@ -181,49 +177,40 @@ export default function HomePage() {
               />
             </label>
 
-            {/* הקישור מתחת לשדה הברכה */}
             {showLink ? (
-              <div style={{ ...styles.field, gridColumn: "1 / -1" }}>
+              <label style={styles.field}>
                 <div style={styles.label}>קישור (אופציונלי)</div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://..."
-                    style={{
-                      ...styles.input,
-                      flex: 1,
-                      minWidth: 220,
-                      borderColor: linkInvalid ? "rgba(231, 76, 60, 0.55)" : "rgba(255,255,255,0.16)",
+                <input
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://..."
+                  style={styles.input}
+                  inputMode="url"
+                />
+                <div style={styles.helperRow}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLink(false);
+                      setLinkUrl("");
                     }}
-                    disabled={submitting}
-                  />
-                  <button type="button" onClick={clearLink} style={btn("danger")} disabled={submitting}>
+                    style={btn("ghost")}
+                    disabled={disableActions}
+                  >
                     הסר קישור
                   </button>
-                  <button type="button" onClick={() => setShowLink(false)} style={btn("default")} disabled={submitting}>
-                    סגור
-                  </button>
                 </div>
-
-                {linkInvalid ? (
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>⚠️ הקישור חייב להתחיל ב־http/https</div>
-                ) : !linkUrl.trim() ? (
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>הדבק קישור שמתחיל ב־https://</div>
-                ) : (
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>✅ נראה טוב</div>
-                )}
-              </div>
+              </label>
             ) : null}
           </div>
 
-          {/* כפתורים: העלאה/צילום + כפתור צרף קישור מתחתיהם */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+          {/* כפתורים מסודרים 2×2, אחידים */}
+          <div style={styles.actionsGrid}>
             <button
               type="button"
               onClick={() => pickFileRef.current?.click()}
               style={btn("default")}
-              disabled={submitting}
+              disabled={disableActions}
             >
               העלאת תמונה/וידאו
             </button>
@@ -232,61 +219,66 @@ export default function HomePage() {
               type="button"
               onClick={() => cameraRef.current?.click()}
               style={btn("primary")}
-              disabled={submitting}
+              disabled={disableActions}
               title="במובייל זה יפתח את המצלמה"
             >
-              📸 צילום תמונה
+              צילום תמונה 📸
             </button>
 
             <button
               type="button"
-              onClick={() => setShowLink(true)}
-              style={btn(linkUrl.trim() ? "primary" : "default")}
-              disabled={submitting}
-              title={linkUrl.trim() ? "קישור מצורף" : "לחץ כדי לצרף קישור"}
+              onClick={() => setShowLink((v) => !v)}
+              style={showLink ? btn("primary") : btn("default")}
+              disabled={disableActions}
+              title="הוספת קישור אופציונלי"
             >
-              {linkUrl.trim() ? "✅ קישור מצורף" : "🔗 צרף קישור"}
+              {showLink ? "קישור פתוח ✅" : "צרף קישור 🔗"}
             </button>
 
-            {file ? (
-              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={submitting}>
+            <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || disableActions}>
+              רענון
+            </button>
+          </div>
+
+          {/* שליחה לבד - רוחב מלא */}
+          <button
+            type="button"
+            onClick={submit}
+            style={canSubmit ? btn("submit") : btn("disabled")}
+            disabled={!canSubmit}
+          >
+            {submitting ? "שולח…" : "שליחה"}
+          </button>
+
+          {file ? (
+            <div style={styles.fileRow}>
+              <div style={{ opacity: 0.9, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>
+                מצורף: <b>{file.name}</b>
+              </div>
+              <button type="button" onClick={() => onSelectFile(null)} style={btn("danger")} disabled={disableActions}>
                 הסר קובץ
               </button>
-            ) : null}
-
-            <div style={{ marginInlineStart: "auto", display: "flex", gap: 10 }}>
-              <button type="button" onClick={loadPosts} style={btn("default")} disabled={loading || submitting}>
-                רענון
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                style={submitting ? btn("disabled") : btn("primary")}
-                disabled={submitting}
-              >
-                {submitting ? "שולח…" : "שליחה"}
-              </button>
             </div>
+          ) : null}
 
-            {/* קלט רגיל (קבצים) */}
-            <input
-              ref={pickFileRef}
-              type="file"
-              accept="image/*,video/*"
-              style={{ display: "none" }}
-              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-            />
+          {/* קלט רגיל (קבצים) */}
+          <input
+            ref={pickFileRef}
+            type="file"
+            accept="image/*,video/*"
+            style={{ display: "none" }}
+            onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+          />
 
-            {/* קלט מצלמה (ברוב המוביילים יפתח מצלמה) */}
-            <input
-              ref={cameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: "none" }}
-              onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
-            />
-          </div>
+          {/* קלט מצלמה (ברוב המוביילים יפתח מצלמה) */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            style={{ display: "none" }}
+            onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
+          />
 
           {previewUrl ? (
             <div style={{ marginTop: 14 }}>
@@ -350,15 +342,24 @@ export default function HomePage() {
   );
 }
 
-function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): React.CSSProperties {
+function btn(
+  kind: "primary" | "danger" | "default" | "disabled" | "submit" | "ghost" = "default"
+): React.CSSProperties {
   const base: React.CSSProperties = {
-    padding: "12px 14px",
-    borderRadius: 12,
+    height: 48,
+    padding: "0 14px",
+    borderRadius: 14,
     border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.06)",
     color: "white",
     cursor: "pointer",
-    fontWeight: 700,
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    width: "100%",
+    userSelect: "none",
   };
 
   if (kind === "primary") {
@@ -370,6 +371,28 @@ function btn(kind: "primary" | "danger" | "default" | "disabled" = "default"): R
   if (kind === "disabled") {
     return { ...base, opacity: 0.45, cursor: "not-allowed" };
   }
+  if (kind === "submit") {
+    return {
+      ...base,
+      height: 54,
+      borderRadius: 16,
+      background: "rgba(46, 204, 113, 0.35)",
+      borderColor: "rgba(46, 204, 113, 0.65)",
+      marginTop: 14,
+      fontSize: 16,
+    };
+  }
+  if (kind === "ghost") {
+    return {
+      ...base,
+      height: 42,
+      width: "auto",
+      padding: "0 12px",
+      background: "transparent",
+      border: "1px solid rgba(255,255,255,0.16)",
+      opacity: 0.9,
+    };
+  }
   return base;
 }
 
@@ -380,14 +403,14 @@ const styles: Record<string, React.CSSProperties> = {
       "radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), #0b1020",
     color: "white",
     direction: "rtl",
-    padding: 18,
+    padding: 16,
   },
   container: {
-    maxWidth: 980,
+    maxWidth: 520,
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    gap: 18,
+    gap: 16,
   },
   header: {
     border: "1px solid rgba(255,255,255,0.12)",
@@ -412,7 +435,7 @@ const styles: Record<string, React.CSSProperties> = {
   sub: {
     margin: "8px 0 0 0",
     opacity: 0.85,
-    lineHeight: 1.5,
+    lineHeight: 1.55,
   },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
@@ -425,9 +448,9 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 0 12px 0",
     fontSize: 18,
   },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+  formStack: {
+    display: "flex",
+    flexDirection: "column",
     gap: 12,
   },
   field: {
@@ -438,6 +461,11 @@ const styles: Record<string, React.CSSProperties> = {
   label: {
     opacity: 0.85,
     fontSize: 13,
+  },
+  helperRow: {
+    marginTop: 8,
+    display: "flex",
+    justifyContent: "flex-start",
   },
   input: {
     width: "100%",
@@ -458,9 +486,26 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     resize: "vertical",
   },
-  list: {
+  actionsGrid: {
+    marginTop: 14,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  fileRow: {
+    marginTop: 12,
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    borderRadius: 14,
+    padding: "10px 12px",
+  },
+  list: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
     gap: 14,
   },
   postCard: {
