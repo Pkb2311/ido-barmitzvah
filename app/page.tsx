@@ -33,6 +33,14 @@ type UISettings = {
   };
 };
 
+type SiteContent = {
+  event_kind: string;
+  honoree_name: string;
+  header_title: string;
+  header_subtitle: string;
+  form_title: string;
+};
+
 const DEFAULT_UI: UISettings = {
   theme: {
     send_color: "#2ecc71",
@@ -48,6 +56,14 @@ const DEFAULT_UI: UISettings = {
     remove: { show: true, label: "הסר קובץ", color: "danger" },
     refresh: { show: true, label: "רענון", color: "default" },
   },
+};
+
+const DEFAULT_CONTENT: SiteContent = {
+  event_kind: "בר מצווה",
+  honoree_name: "עידו",
+  header_title: "🎉 בר מצווה",
+  header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
+  form_title: "אשמח לברכה מרגשת ממך",
 };
 
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
@@ -131,6 +147,8 @@ export default function HomePage() {
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
 
+  const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT);
+
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -187,6 +205,17 @@ export default function HomePage() {
       setUi(next);
       setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
       setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
+      if (j?.content && typeof j.content === "object") {
+        const c = j.content as Partial<SiteContent>;
+        setContent({
+          event_kind: typeof c.event_kind === "string" && c.event_kind.trim() ? c.event_kind : DEFAULT_CONTENT.event_kind,
+          honoree_name: typeof c.honoree_name === "string" && c.honoree_name.trim() ? c.honoree_name : DEFAULT_CONTENT.honoree_name,
+          header_title: typeof c.header_title === "string" && c.header_title.trim() ? c.header_title : DEFAULT_CONTENT.header_title,
+          header_subtitle:
+            typeof c.header_subtitle === "string" && c.header_subtitle.trim() ? c.header_subtitle : DEFAULT_CONTENT.header_subtitle,
+          form_title: typeof c.form_title === "string" && c.form_title.trim() ? c.form_title : DEFAULT_CONTENT.form_title,
+        });
+      }
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -416,14 +445,16 @@ export default function HomePage() {
                 />
               )
             ) : null}
-            <h1 style={styles.h1}>🎉 בר מצווה</h1>
+            <h1 style={styles.h1}>{content.header_title || `🎉 ${content.event_kind}`}</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
+          <p style={styles.sub}>
+            {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
+          </p>
         </header>
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
-          <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
+          <h2 style={styles.h2}>{content.form_title || "אשמח לברכה מרגשת ממך"}</h2>
 
           <div style={styles.formGrid}>
             <label style={styles.field}>

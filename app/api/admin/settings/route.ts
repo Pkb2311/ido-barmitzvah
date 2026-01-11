@@ -28,6 +28,13 @@ type SiteSettingsValue = {
   ui: UISettings;
   hero_image_url: string | null;
   hero_link_url: string | null;
+  content: {
+    event_kind: string;
+    honoree_name: string;
+    header_title: string;
+    header_subtitle: string;
+    form_title: string;
+  };
 };
 
 const DEFAULT_VALUE: SiteSettingsValue = {
@@ -50,6 +57,13 @@ const DEFAULT_VALUE: SiteSettingsValue = {
   },
   hero_image_url: null,
   hero_link_url: null,
+  content: {
+    event_kind: "בר מצווה",
+    honoree_name: "עידו",
+    header_title: "🎉 בר מצווה",
+    header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
+    form_title: "אשמח לברכה מרגשת ממך",
+  },
 };
 
 function supabasePublic() {
@@ -114,7 +128,23 @@ function normBtn(key: keyof UISettings["buttons"]): UIButtonCfg {
   const hero_image_url = typeof v.hero_image_url === "string" ? v.hero_image_url : b.hero_image_url;
   const hero_link_url = typeof v.hero_link_url === "string" ? v.hero_link_url : b.hero_link_url;
 
-  return { require_approval, ui, hero_image_url, hero_link_url };
+  const cIn = (v.content && typeof v.content === "object") ? v.content : {};
+  const content = {
+    event_kind: typeof cIn.event_kind === "string" ? cIn.event_kind.trim() : b.content.event_kind,
+    honoree_name: typeof cIn.honoree_name === "string" ? cIn.honoree_name.trim() : b.content.honoree_name,
+    header_title: typeof cIn.header_title === "string" ? cIn.header_title.trim() : b.content.header_title,
+    header_subtitle: typeof cIn.header_subtitle === "string" ? cIn.header_subtitle.trim() : b.content.header_subtitle,
+    form_title: typeof cIn.form_title === "string" ? cIn.form_title.trim() : b.content.form_title,
+  };
+
+  // basic non-empty fallbacks
+  if (!content.event_kind) content.event_kind = b.content.event_kind;
+  if (!content.honoree_name) content.honoree_name = b.content.honoree_name;
+  if (!content.header_title) content.header_title = `🎉 ${content.event_kind}`;
+  if (!content.header_subtitle) content.header_subtitle = b.content.header_subtitle;
+  if (!content.form_title) content.form_title = b.content.form_title;
+
+  return { require_approval, ui, hero_image_url, hero_link_url, content };
 }
 
 async function readCurrent() {

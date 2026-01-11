@@ -3,12 +3,13 @@
 import type React from "react";
 
 type Props = {
-  current: "posts" | "ui" | "images";
+  current: "posts" | "ui" | "images" | "settings";
 };
 
 export function AdminNav({ current }: Props) {
   const items: Array<{ key: Props["current"]; label: string; href: string }> = [
     { key: "posts", label: "📬 ברכות", href: "/admin" },
+    { key: "settings", label: "🧩 תוכן/כותרות", href: "/admin/settings" },
     { key: "ui", label: "🎛️ עיצוב/כפתורים", href: "/admin/ui" },
     { key: "images", label: "🖼️ תמונות", href: "/admin/images" },
   ];
