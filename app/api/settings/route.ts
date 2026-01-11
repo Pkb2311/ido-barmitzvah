@@ -2,6 +2,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Prevent Vercel/Next from caching this endpoint.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function supabasePublic() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -11,6 +15,12 @@ function supabasePublic() {
 export async function GET() {
   const supabase = supabasePublic();
   const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
+
+  const noStoreHeaders = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+    Pragma: "no-cache",
+    Expires: "0",
+  } as Record<string, string>;
 
   if (error)
     return NextResponse.json(
@@ -28,7 +38,7 @@ export async function GET() {
           form_title: "אשמח לברכה מרגשת ממך",
         },
       },
-      { status: 200 }
+      { status: 200, headers: noStoreHeaders }
     );
 
   const require_approval = data?.value?.require_approval ?? true;
@@ -48,5 +58,5 @@ export async function GET() {
     form_title: typeof v?.content?.form_title === "string" ? v.content.form_title : "אשמח לברכה מרגשת ממך",
   };
 
-  return NextResponse.json({ require_approval, ui, hero_image_url, hero_link_url, content }, { status: 200 });
+  return NextResponse.json({ require_approval, ui, hero_image_url, hero_link_url, content }, { status: 200, headers: noStoreHeaders });
 }
