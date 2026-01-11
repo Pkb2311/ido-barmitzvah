@@ -1,52 +1,28 @@
 // app/api/settings/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseServer } from "../../../lib/supabaseServer";
 
-// Prevent Vercel/Next from caching this endpoint.
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function supabasePublic() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
 export async function GET() {
-  const supabase = supabasePublic();
+  const supabase = supabaseServer();
   const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
-
-  const noStoreHeaders = {
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
-    Pragma: "no-cache",
-    Expires: "0",
-  } as Record<string, string>;
 
   if (error)
     return NextResponse.json(
-      {
-        ui: null,
-        require_approval: true,
-        hero_image_url: null,
-        hero_link_url: null,
-        content: {
-          event_kind: "בר מצווה",
-          honoree_name: "עידו",
-          header_title: "🎉 בר מצווה",
-          header_subtitle:
-            "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
-          form_title: "אשמח לברכה מרגשת ממך",
-        },
-      },
-      { status: 200, headers: noStoreHeaders }
+      { error: error.message },
+      { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } }
     );
 
-  const require_approval = data?.value?.require_approval ?? true;
-  const ui = data?.value?.ui ?? null;
-  const hero_image_url = typeof data?.value?.hero_image_url === "string" ? data.value.hero_image_url : null;
-  const hero_link_url = typeof data?.value?.hero_link_url === "string" ? data.value.hero_link_url : null;
+  const v: any = data?.value || {};
+  const require_approval = typeof v?.require_approval === "boolean" ? v.require_approval : true;
 
-  const v = data?.value;
+  const ui = (v?.ui && typeof v.ui === "object") ? v.ui : null;
+
+  const hero_image_url = typeof v?.hero_image_url === "string" ? v.hero_image_url : null;
+  const hero_link_url = typeof v?.hero_link_url === "string" ? v.hero_link_url : null;
+
   const content = {
     event_kind: typeof v?.content?.event_kind === "string" ? v.content.event_kind : "בר מצווה",
     honoree_name: typeof v?.content?.honoree_name === "string" ? v.content.honoree_name : "עידו",
@@ -58,5 +34,15 @@ export async function GET() {
     form_title: typeof v?.content?.form_title === "string" ? v.content.form_title : "אשמח לברכה מרגשת ממך",
   };
 
-  return NextResponse.json({ require_approval, ui, hero_image_url, hero_link_url, content }, { status: 200, headers: noStoreHeaders });
+  const payments = {
+    enabled: typeof v?.payments?.enabled === "boolean" ? v.payments.enabled : false,
+    bit_url: typeof v?.payments?.bit_url === "string" ? v.payments.bit_url : "",
+    paybox_url: typeof v?.payments?.paybox_url === "string" ? v.payments.paybox_url : "",
+    title: typeof v?.payments?.title === "string" ? v.payments.title : "🎁 שליחת מתנה",
+  };
+
+  return NextResponse.json(
+    { require_approval, ui, hero_image_url, hero_link_url, content, payments },
+    { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
 }

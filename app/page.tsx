@@ -41,6 +41,13 @@ type SiteContent = {
   form_title: string;
 };
 
+type PaymentSettings = {
+  enabled: boolean;
+  bit_url: string;
+  paybox_url: string;
+  title?: string;
+};
+
 const DEFAULT_UI: UISettings = {
   theme: {
     send_color: "#2ecc71",
@@ -65,6 +72,14 @@ const DEFAULT_CONTENT: SiteContent = {
   header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
   form_title: "אשמח לברכה מרגשת ממך",
 };
+
+const DEFAULT_PAYMENTS: PaymentSettings = {
+  enabled: false,
+  bit_url: "",
+  paybox_url: "",
+  title: "🎁 שליחת מתנה",
+};
+
 
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
 
@@ -146,6 +161,7 @@ export default function HomePage() {
 
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentSettings>(DEFAULT_PAYMENTS);
 
   const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT);
 
@@ -205,6 +221,17 @@ export default function HomePage() {
       setUi(next);
       setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
       setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
+      if (j?.payments && typeof j.payments === "object") {
+        const p = j.payments as Partial<PaymentSettings>;
+        setPayments({
+          enabled: typeof p.enabled === "boolean" ? p.enabled : DEFAULT_PAYMENTS.enabled,
+          bit_url: typeof p.bit_url === "string" ? p.bit_url : DEFAULT_PAYMENTS.bit_url,
+          paybox_url: typeof p.paybox_url === "string" ? p.paybox_url : DEFAULT_PAYMENTS.paybox_url,
+          title: typeof p.title === "string" ? p.title : DEFAULT_PAYMENTS.title,
+        });
+      } else {
+        setPayments(DEFAULT_PAYMENTS);
+      }
       if (j?.content && typeof j.content === "object") {
         const c = j.content as Partial<SiteContent>;
         setContent({
@@ -451,6 +478,28 @@ export default function HomePage() {
           <p style={styles.sub}>
             {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
           </p>
+          {payments.enabled && (payments.bit_url || payments.paybox_url) ? (
+            <div style={styles.paymentsWrap}>
+              <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
+              <div style={styles.paymentsBtns}>
+                {payments.bit_url ? (
+                  <a href={payments.bit_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    <button type="button" style={btn("default", ui)}>
+                      Bit
+                    </button>
+                  </a>
+                ) : null}
+                {payments.paybox_url ? (
+                  <a href={payments.paybox_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    <button type="button" style={btn("default", ui)}>
+                      PayBox
+                    </button>
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
         </header>
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
@@ -554,7 +603,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={submit}
-              style={submitting ? btn("disabled", ui) : btn("send", ui)}
+              style={{ ...(submitting ? btn("disabled", ui) : btn("send", ui)), gridColumn: "1 / -1", width: "100%" }}
               disabled={submitting}
             >
               {submitting ? "שולח…" : "שליחה"}
@@ -690,10 +739,7 @@ export default function HomePage() {
 
                         {p.link_url ? (
                           <div style={{ marginTop: 10 }}>
-                            🔗{" "}
-                            <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
-                              {p.link_url}
-                            </a>
+                            <LinkPreview url={p.link_url} />
                           </div>
                         ) : null}
 
@@ -722,6 +768,103 @@ export default function HomePage() {
 }
 
 /** ---------- Buttons (theme-aware) ---------- **/
+
+
+function isYouTubeUrl(url: string) {
+  return /(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(url);
+}
+
+function getYouTubeEmbedUrl(url: string) {
+  try {
+    const u = new URL(url);
+    let id = "";
+    if (u.hostname.includes("youtu.be")) {
+      id = u.pathname.replace("/", "");
+    } else {
+      id = u.searchParams.get("v") || "";
+    }
+    if (!id) return null;
+    return `https://www.youtube.com/embed/${id}`;
+  } catch {
+    return null;
+  }
+}
+
+type UnfurlData = {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  site_name?: string;
+};
+
+function LinkPreview({ url }: { url: string }) {
+  const [data, setData] = useState<UnfurlData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setFailed(false);
+    setData(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`, { cache: "no-store" as any });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j?.error || "unfurl failed");
+        if (!alive) return;
+        setData(j?.data || null);
+      } catch {
+        if (!alive) return;
+        setFailed(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  const ytEmbed = isYouTubeUrl(url) ? getYouTubeEmbedUrl(url) : null;
+
+  return (
+    <div style={styles.linkPreviewWrap}>
+      {ytEmbed ? (
+        <div style={{ marginBottom: 10 }}>
+          <iframe
+            src={ytEmbed}
+            title="YouTube"
+            style={{ width: "100%", aspectRatio: "16/9", border: 0, borderRadius: 12 }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : null}
+
+      {data ? (
+        <a href={url} target="_blank" rel="noreferrer" style={styles.linkCard as any}>
+          {data.image ? <img src={data.image} alt="" style={styles.linkCardImg} /> : null}
+          <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+            <div style={styles.linkCardTitle}>{data.title || data.site_name || url}</div>
+            {data.description ? <div style={styles.linkCardDesc}>{data.description}</div> : null}
+            <div style={styles.linkCardDomain}>{(() => {
+              try { return new URL(url).hostname; } catch { return url; }
+            })()}</div>
+          </div>
+        </a>
+      ) : failed ? (
+        <div>
+          🔗{" "}
+          <a href={url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+            {url}
+          </a>
+        </div>
+      ) : (
+        <div style={{ opacity: 0.75 }}>טוען תצוגה מקדימה…</div>
+      )}
+    </div>
+  );
+}
 
 function btn(
   kind: "send" | "danger" | "default" | "disabled",

@@ -3,7 +3,7 @@
 import type React from "react";
 
 type Props = {
-  current: "posts" | "ui" | "images" | "settings";
+  current: "posts" | "ui" | "images" | "settings" | "payments";
 };
 
 export function AdminNav({ current }: Props) {
@@ -11,6 +11,7 @@ export function AdminNav({ current }: Props) {
     { key: "posts", label: "📬 ברכות", href: "/admin" },
     { key: "settings", label: "🧩 תוכן/כותרות", href: "/admin/settings" },
     { key: "ui", label: "🎛️ עיצוב/כפתורים", href: "/admin/ui" },
+    { key: "payments", label: "💸 תשלומים", href: "/admin/payments" },
     { key: "images", label: "🖼️ תמונות", href: "/admin/images" },
   ];
 
