@@ -7,6 +7,32 @@ import net from "net";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type UnfurlData = {
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  site_name: string;
+};
+
+function safeHostname(u: string) {
+  try {
+    return new URL(u).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function minimalData(finalUrl: string): UnfurlData {
+  return {
+    url: finalUrl,
+    title: safeHostname(finalUrl) || finalUrl,
+    description: "",
+    image: "",
+    site_name: "",
+  };
+}
+
 function isPrivateIp(ip: string) {
   // IPv4
   if (ip.startsWith("10.")) return true;
@@ -47,6 +73,139 @@ function pickTitle(html: string) {
   return m?.[1]?.trim() || "";
 }
 
+function hostIs(host: string, parts: string[]) {
+  const h = host.toLowerCase();
+  return parts.some((p) => h === p || h.endsWith(`.${p}`));
+}
+
+
+function extractYouTubeId(targetUrl: string): string | null {
+  try {
+    const u = new URL(targetUrl);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+
+    // youtu.be/<id>
+    if (host === "youtu.be") {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      return id || null;
+    }
+
+    if (host.endsWith("youtube.com")) {
+      // watch?v=<id>
+      const v = u.searchParams.get("v");
+      if (v) return v;
+
+      const parts = u.pathname.split("/").filter(Boolean);
+      const idx = parts.findIndex((p) => ["shorts", "live", "embed"].includes(p));
+      if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function tryOEmbed(targetUrl: string): Promise<UnfurlData | null> {
+  // לא כל אתר מאפשר unfurl מהשרת (403 וכו').
+  // בשביל פלטפורמות נפוצות ננסה OEmbed (כשזמין) כדי לקבל title/thumbnail.
+  let u: URL;
+  try {
+    u = new URL(targetUrl);
+  } catch {
+    return null;
+  }
+
+  const host = u.hostname.toLowerCase();
+
+  // YouTube oEmbed
+  if (hostIs(host, ["youtube.com", "youtu.be", "m.youtube.com"])) {
+    // YouTube oEmbed sometimes doesn't like shorts/live/embed urls directly.
+    // Normalize to watch?v=<id> when possible.
+    const ytId = extractYouTubeId(targetUrl);
+    const normalized = ytId ? `https://www.youtube.com/watch?v=${ytId}` : targetUrl;
+    const api = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(normalized)}`;
+    try {
+      const r = await fetch(api, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+        cache: "no-store" as any,
+      });
+      if (!r.ok) return null;
+      const j: any = await r.json().catch(() => null);
+      if (!j) return null;
+      return {
+        url: targetUrl,
+        title: typeof j.title === "string" ? j.title : safeHostname(targetUrl),
+        description: "",
+        image: typeof j.thumbnail_url === "string" ? j.thumbnail_url : "",
+        site_name: "YouTube",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // TikTok oEmbed (בד"כ פתוח)
+  if (hostIs(host, ["tiktok.com", "www.tiktok.com", "m.tiktok.com"])) {
+    const api = `https://www.tiktok.com/oembed?url=${encodeURIComponent(targetUrl)}`;
+    try {
+      const r = await fetch(api, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+        cache: "no-store" as any,
+      });
+      if (!r.ok) return null;
+      const j: any = await r.json().catch(() => null);
+      if (!j) return null;
+      return {
+        url: targetUrl,
+        title: typeof j.title === "string" ? j.title : safeHostname(targetUrl),
+        description: "",
+        image: typeof j.thumbnail_url === "string" ? j.thumbnail_url : "",
+        site_name: "TikTok",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Instagram oEmbed: לעיתים דורש הרשאות; ננסה ואם נכשל נחזור null
+  if (hostIs(host, ["instagram.com", "www.instagram.com"])) {
+    const api = `https://www.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`;
+    try {
+      const r = await fetch(api, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+        cache: "no-store" as any,
+      });
+      if (!r.ok) return null;
+      const j: any = await r.json().catch(() => null);
+      if (!j) return null;
+      return {
+        url: targetUrl,
+        title: typeof j.title === "string" ? j.title : safeHostname(targetUrl),
+        description: "",
+        image: typeof j.thumbnail_url === "string" ? j.thumbnail_url : "",
+        site_name: "Instagram",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -71,17 +230,27 @@ export async function GET(req: Request) {
     const ipType = net.isIP(host);
     if (ipType && isPrivateIp(host)) return NextResponse.json({ error: "blocked ip" }, { status: 400 });
 
+    // oEmbed for known providers (more reliable than HTML fetch for some sites)
+    const oembed = await tryOEmbed(url.toString());
+    if (oembed) {
+      return NextResponse.json({ data: oembed }, { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
+
     const res = await fetch(url.toString(), {
       method: "GET",
       redirect: "follow",
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; IdoBarmitzvahBot/1.0)",
-        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
       },
       cache: "no-store" as any,
     });
 
-    if (!res.ok) return NextResponse.json({ error: `fetch failed (${res.status})` }, { status: 400 });
+    if (!res.ok) {
+      // נחזיר מידע מינימלי כדי שהלקוח עדיין יראה "כרטיס" במקום ליפול
+      return NextResponse.json({ data: minimalData(url.toString()) }, { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } });
+    }
 
     const finalUrl = res.url || url.toString();
 
@@ -89,7 +258,7 @@ export async function GET(req: Request) {
     if (!ct.includes("text/html")) {
       // לא HTML — נחזיר רק URL
       return NextResponse.json(
-        { data: { url: finalUrl, title: new URL(finalUrl).hostname, description: "", image: "", site_name: "" } },
+        { data: minimalData(finalUrl) },
         { status: 200, headers: { "Cache-Control": "no-store, max-age=0" } }
       );
     }
