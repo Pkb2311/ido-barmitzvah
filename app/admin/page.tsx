@@ -410,8 +410,6 @@ export default function AdminPage() {
                 onSecondaryAction={(id) => deletePost(id)}
                 onEdit={startEdit}
                 editingId={editingId}
-                editName={editName}
-                setEditName={setEditName}
                 editMessage={editMessage}
                 editLink={editLink}
                 setEditMessage={setEditMessage}
@@ -429,8 +427,6 @@ export default function AdminPage() {
                 onSecondaryAction={(id) => deletePost(id)}
                 onEdit={startEdit}
                 editingId={editingId}
-                editName={editName}
-                setEditName={setEditName}
                 editMessage={editMessage}
                 editLink={editLink}
                 setEditMessage={setEditMessage}
@@ -508,8 +504,6 @@ function Section(props: {
   onSecondaryAction: (id: string) => void;
   onEdit: (row: PostRow) => void;
   editingId: string | null;
-  editName: string;
-  setEditName: (v: string) => void;
   editMessage: string;
   editLink: string;
   setEditMessage: (v: string) => void;
@@ -526,8 +520,6 @@ function Section(props: {
     onSecondaryAction,
     onEdit,
     editingId,
-    editName,
-    setEditName,
     editMessage,
     editLink,
     setEditMessage,
