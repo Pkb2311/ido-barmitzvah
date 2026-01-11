@@ -5,6 +5,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseServer } from "../../../../lib/supabaseServer";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+
 type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
 type UISettings = {
   theme: {

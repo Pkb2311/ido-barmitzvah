@@ -4,6 +4,10 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabaseServer";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+
 type AdminPostRow = {
   id: string;
   created_at: string;
@@ -38,7 +42,7 @@ export async function GET(req: Request) {
     .limit(500);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: (data || []) as AdminPostRow[] }, { status: 200 });
+  return NextResponse.json({ data: (data || []) as AdminPostRow[] }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(req: Request) {
@@ -66,7 +70,7 @@ export async function PATCH(req: Request) {
 
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json({ ok: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function DELETE(req: Request) {
@@ -77,5 +81,5 @@ export async function DELETE(req: Request) {
 
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json({ ok: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
