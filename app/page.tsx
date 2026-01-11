@@ -473,7 +473,7 @@ export default function HomePage() {
               )
             ) : null}
             <h1 style={styles.h1}>{content.header_title || `🎉 ${content.event_kind}`}</h1>
-            <div style={styles.badge}>ברכות מאושרות: {count}</div>
+            <div style={styles.badge}>ברכות מרגשות מה-❤️: {count}</div>
           </div>
           <p style={styles.sub}>
             {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
