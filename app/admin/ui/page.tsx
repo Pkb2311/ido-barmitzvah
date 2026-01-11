@@ -159,6 +159,16 @@ export default function AdminUIPage() {
                 <div style={lab()}>צבע רקע</div>
                 <input type="color" value={ui.theme.bg} onChange={(e) => setTheme("bg", e.target.value)} />
               </label>
+
+              <label style={field()}>
+                <div style={lab()}>רקע כרטיסים (card_bg)</div>
+                <input
+                  value={ui.theme.card_bg}
+                  onChange={(e) => setTheme("card_bg", e.target.value)}
+                  style={inp()}
+                  placeholder='למשל: rgba(255,255,255,0.04)'
+                />
+              </label>
             </div>
           </div>
 

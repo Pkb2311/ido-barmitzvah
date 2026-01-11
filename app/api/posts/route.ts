@@ -29,19 +29,40 @@ export async function GET(req: Request) {
   const supabase = supabasePublic();
   const ownerToken = getOwnerTokenFromReq(req);
 
-  const { data, error } = await supabase
+  // ⚠️ אם editable_until לא קיים (או ה-cache של Supabase לא התעדכן) ניפול חזרה ל-created_at + חלון עריכה
+  const selectFull = "id, created_at, name, message, media_url, media_type, link_url, approved, editable_until, owner_token";
+  const selectFallback = "id, created_at, name, message, media_url, media_type, link_url, approved, owner_token";
+
+  let data: any[] | null = null;
+  let error: any = null;
+
+  ({ data, error } = await supabase
     .from("posts")
-    .select("id, created_at, name, message, media_url, media_type, link_url, approved, editable_until, owner_token")
+    .select(selectFull)
     .eq("approved", true)
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(200));
+
+  if (error && String(error.message || "").includes("editable")) {
+    // fallback ללא editable_until
+    ({ data, error } = await supabase
+      .from("posts")
+      .select(selectFallback)
+      .eq("approved", true)
+      .order("created_at", { ascending: false })
+      .limit(200));
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const rows = (data || []).map((p: any) => {
-    const editableUntil = p.editable_until ? new Date(p.editable_until).getTime() : 0;
-    const stillEditable = Date.now() <= editableUntil;
+    const editableUntilMs = p.editable_until
+      ? new Date(p.editable_until).getTime()
+      : new Date(p.created_at).getTime() + EDIT_WINDOW_MS;
+    const stillEditable = Date.now() <= editableUntilMs;
     const can_edit = !!ownerToken && p.owner_token === ownerToken && stillEditable;
+
+    const editable_until = p.editable_until ?? new Date(editableUntilMs).toISOString();
 
     return {
       id: p.id,
@@ -51,7 +72,7 @@ export async function GET(req: Request) {
       media_url: p.media_url,
       media_type: p.media_type,
       link_url: p.link_url,
-      editable_until: p.editable_until,
+      editable_until,
       can_edit,
     };
   });
@@ -108,7 +129,11 @@ export async function POST(req: Request) {
 
   const editable_until = addMsIso(EDIT_WINDOW_MS);
 
-  const { data, error } = await supabase
+  // ⚠️ אם editable_until לא קיים עדיין, נכניס בלי העמודה ונחשב זמנית בצד שרת
+  let data: any = null;
+  let error: any = null;
+
+  ({ data, error } = await supabase
     .from("posts")
     .insert({
       name,
@@ -121,14 +146,28 @@ export async function POST(req: Request) {
       editable_until,
     })
     .select("id, approved, editable_until")
-    .single();
+    .single());
+
+  if (error && String(error.message || "").includes("editable")) {
+    ({ data, error } = await supabase
+      .from("posts")
+      .insert({
+        name,
+        message,
+        link_url,
+        media_url,
+        media_type,
+        approved,
+        owner_token: ownerToken,
+      })
+      .select("id, approved, created_at")
+      .single());
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json(
-    { ok: true, id: data.id, approved: data.approved, editable_until: data.editable_until },
-    { status: 200 }
-  );
+  const computedEditable = data?.editable_until ?? editable_until;
+  return NextResponse.json({ ok: true, id: data.id, approved: data.approved, editable_until: computedEditable }, { status: 200 });
 }
 
 export async function PATCH(req: Request) {
@@ -143,16 +182,30 @@ export async function PATCH(req: Request) {
 
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
 
-  const { data: row, error: getErr } = await supabase
+
+  let row: any = null;
+  let getErr: any = null;
+
+  ({ data: row, error: getErr } = await supabase
     .from("posts")
-    .select("id, owner_token, editable_until")
+    .select("id, owner_token, editable_until, created_at")
     .eq("id", id)
-    .single();
+    .single());
+
+  if (getErr && String(getErr.message || "").includes("editable")) {
+    ({ data: row, error: getErr } = await supabase
+      .from("posts")
+      .select("id, owner_token, created_at")
+      .eq("id", id)
+      .single());
+  }
 
   if (getErr || !row) return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
 
-  const editableUntil = row.editable_until ? new Date(row.editable_until).getTime() : 0;
-  const stillEditable = Date.now() <= editableUntil;
+  const editableUntilMs = row.editable_until
+    ? new Date(row.editable_until).getTime()
+    : new Date(row.created_at).getTime() + EDIT_WINDOW_MS;
+  const stillEditable = Date.now() <= editableUntilMs;
 
   if (row.owner_token !== ownerToken || !stillEditable) {
     return NextResponse.json({ error: "אין הרשאה לעריכה (או שפג הזמן)" }, { status: 403 });
@@ -177,16 +230,30 @@ export async function DELETE(req: Request) {
   const id = String(body?.id || "").trim();
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
 
-  const { data: row, error: getErr } = await supabase
+
+  let row: any = null;
+  let getErr: any = null;
+
+  ({ data: row, error: getErr } = await supabase
     .from("posts")
-    .select("id, owner_token, editable_until")
+    .select("id, owner_token, editable_until, created_at")
     .eq("id", id)
-    .single();
+    .single());
+
+  if (getErr && String(getErr.message || "").includes("editable")) {
+    ({ data: row, error: getErr } = await supabase
+      .from("posts")
+      .select("id, owner_token, created_at")
+      .eq("id", id)
+      .single());
+  }
 
   if (getErr || !row) return NextResponse.json({ error: "לא נמצא" }, { status: 404 });
 
-  const editableUntil = row.editable_until ? new Date(row.editable_until).getTime() : 0;
-  const stillEditable = Date.now() <= editableUntil;
+  const editableUntilMs = row.editable_until
+    ? new Date(row.editable_until).getTime()
+    : new Date(row.created_at).getTime() + EDIT_WINDOW_MS;
+  const stillEditable = Date.now() <= editableUntilMs;
 
   if (row.owner_token !== ownerToken || !stillEditable) {
     return NextResponse.json({ error: "אין הרשאה למחיקה (או שפג הזמן)" }, { status: 403 });

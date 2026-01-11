@@ -78,6 +78,11 @@ export default function AdminPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // עריכה ע"י מנהל
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
+  const [editLink, setEditLink] = useState("");
+
   function showToast(txt: string) {
     setToast(txt);
     window.setTimeout(() => setToast(null), 3500);
@@ -145,6 +150,51 @@ export default function AdminPage() {
       await loadPosts();
     } catch (e: any) {
       setErr(e?.message || "שגיאה בעדכון אישור");
+    }
+  }
+
+  function startEdit(row: PostRow) {
+    setEditingId(row.id);
+    setEditMessage(row.message || "");
+    setEditLink(row.link_url || "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditMessage("");
+    setEditLink("");
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    const msg = editMessage.trim();
+    const link = editLink.trim();
+
+    if (!msg) {
+      setErr("הברכה לא יכולה להיות ריקה");
+      return;
+    }
+    if (link && !/^https?:\/\//i.test(link)) {
+      setErr("הלינק חייב להתחיל ב-http/https");
+      return;
+    }
+
+    setErr(null);
+    try {
+      const res = await fetch("/api/admin/posts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingId, message: msg, link_url: link }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "שגיאה בעדכון");
+
+      showToast("עודכן ✅");
+      cancelEdit();
+      await loadPosts();
+    } catch (e: any) {
+      setErr(e?.message || "שגיאה בעדכון");
     }
   }
 
@@ -226,7 +276,7 @@ export default function AdminPage() {
                 />
                 <div>
                   <div style={{ fontWeight: 900 }}>דורש אישור מנהל לפני פרסום</div>
-                  <div style={{ opacity: 0.8, fontSize: 12 }}>
+                  <div style={{ opacity: 0.8, fontSize: 14 }}>
                     אם מסומן: ברכות נכנסות ל״ממתינים״ ורק אחרי אישור יופיעו באתר
                   </div>
                 </div>
@@ -274,6 +324,35 @@ export default function AdminPage() {
                     }
                   />
                 </label>
+
+                <label style={styles.field}>
+                  <div style={styles.label}>צבע רקע</div>
+                  <input
+                    type="color"
+                    value={ui.theme.bg}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        ui: { ...s.ui, theme: { ...s.ui.theme, bg: e.target.value } },
+                      }))
+                    }
+                  />
+                </label>
+
+                <label style={styles.field}>
+                  <div style={styles.label}>רקע כרטיסים (card_bg)</div>
+                  <input
+                    value={ui.theme.card_bg}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        ui: { ...s.ui, theme: { ...s.ui.theme, card_bg: e.target.value } },
+                      }))
+                    }
+                    style={styles.smallInput}
+                    placeholder='למשל: rgba(255,255,255,0.04)'
+                  />
+                </label>
               </div>
 
               <div style={{ height: 14 }} />
@@ -318,6 +397,14 @@ export default function AdminPage() {
                 onPrimaryAction={(id) => setApprove(id, true)}
                 secondaryActionLabel="מחק"
                 onSecondaryAction={(id) => deletePost(id)}
+                onEdit={startEdit}
+                editingId={editingId}
+                editMessage={editMessage}
+                editLink={editLink}
+                setEditMessage={setEditMessage}
+                setEditLink={setEditLink}
+                onCancelEdit={cancelEdit}
+                onSaveEdit={saveEdit}
               />
 
               <Section
@@ -327,6 +414,14 @@ export default function AdminPage() {
                 onPrimaryAction={(id) => setApprove(id, false)}
                 secondaryActionLabel="מחק"
                 onSecondaryAction={(id) => deletePost(id)}
+                onEdit={startEdit}
+                editingId={editingId}
+                editMessage={editMessage}
+                editLink={editLink}
+                setEditMessage={setEditMessage}
+                setEditLink={setEditLink}
+                onCancelEdit={cancelEdit}
+                onSaveEdit={saveEdit}
               />
             </div>
           )}
@@ -396,8 +491,31 @@ function Section(props: {
   onPrimaryAction: (id: string) => void;
   secondaryActionLabel: string;
   onSecondaryAction: (id: string) => void;
+  onEdit: (row: PostRow) => void;
+  editingId: string | null;
+  editMessage: string;
+  editLink: string;
+  setEditMessage: (v: string) => void;
+  setEditLink: (v: string) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
 }) {
-  const { title, rows, primaryActionLabel, onPrimaryAction, secondaryActionLabel, onSecondaryAction } = props;
+  const {
+    title,
+    rows,
+    primaryActionLabel,
+    onPrimaryAction,
+    secondaryActionLabel,
+    onSecondaryAction,
+    onEdit,
+    editingId,
+    editMessage,
+    editLink,
+    setEditMessage,
+    setEditLink,
+    onCancelEdit,
+    onSaveEdit,
+  } = props;
 
   return (
     <div style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 12 }}>
@@ -412,10 +530,24 @@ function Section(props: {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontWeight: 900 }}>{r.name}</div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>{formatDate(r.created_at)}</div>
+                  <div style={{ fontSize: 14, opacity: 0.75 }}>{formatDate(r.created_at)}</div>
                 </div>
 
                 <div style={{ display: "flex", gap: 8 }}>
+                  {editingId === r.id ? (
+                    <>
+                      <button onClick={onSaveEdit} style={btn("primary")}>
+                        שמור עריכה
+                      </button>
+                      <button onClick={onCancelEdit} style={btn("default")}>
+                        ביטול
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => onEdit(r)} style={btn("default")}>
+                      עריכה
+                    </button>
+                  )}
                   <button onClick={() => onPrimaryAction(r.id)} style={btn("primary")}>
                     {primaryActionLabel}
                   </button>
@@ -425,9 +557,33 @@ function Section(props: {
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{r.message}</div>
+              {editingId === r.id ? (
+                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  <label style={styles.field}>
+                    <div style={styles.label}>ברכה</div>
+                    <textarea
+                      value={editMessage}
+                      onChange={(e) => setEditMessage(e.target.value)}
+                      rows={5}
+                      style={{ ...styles.smallInput, minHeight: 120, resize: "vertical" as const }}
+                    />
+                  </label>
 
-              {r.link_url ? (
+                  <label style={styles.field}>
+                    <div style={styles.label}>קישור (אופציונלי)</div>
+                    <input
+                      value={editLink}
+                      onChange={(e) => setEditLink(e.target.value)}
+                      style={styles.smallInput}
+                      placeholder="https://..."
+                    />
+                  </label>
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{r.message}</div>
+              )}
+
+              {editingId !== r.id && r.link_url ? (
                 <div style={{ marginTop: 10 }}>
                   🔗{" "}
                   <a href={r.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
@@ -490,13 +646,13 @@ const styles: Record<string, React.CSSProperties> = {
     backdropFilter: "blur(10px)",
   },
   h2: { margin: "0 0 12px 0", fontSize: 18, fontWeight: 900 },
-  h3: { margin: "0 0 10px 0", fontSize: 14, fontWeight: 900, opacity: 0.95 },
+  h3: { margin: "0 0 10px 0", fontSize: 15, fontWeight: 900, opacity: 0.95 },
   err: { background: "rgba(231, 76, 60, 0.20)", border: "1px solid rgba(231, 76, 60, 0.45)", padding: 10, borderRadius: 12, marginTop: 12 },
   toast: { background: "rgba(0,0,0,0.75)", border: "1px solid rgba(255,255,255,0.18)", padding: 10, borderRadius: 12, marginTop: 12 },
   row: { display: "flex", gap: 10, alignItems: "flex-start" },
-  colorsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 },
+  colorsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
   field: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { fontSize: 12, opacity: 0.9, fontWeight: 900 },
+  label: { fontSize: 14, opacity: 0.9, fontWeight: 900 },
   btnRow: {
     display: "grid",
     gridTemplateColumns: "180px 1fr 120px",
@@ -512,7 +668,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
-    padding: "10px 10px",
+    padding: "11px 11px",
     outline: "none",
   },
   smallSelect: {
@@ -521,7 +677,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,255,255,0.16)",
     background: "rgba(0,0,0,0.25)",
     color: "white",
-    padding: "10px 10px",
+    padding: "11px 11px",
     outline: "none",
   },
   postBox: {

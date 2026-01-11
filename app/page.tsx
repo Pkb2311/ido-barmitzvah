@@ -503,7 +503,7 @@ export default function HomePage() {
           </div>
 
           {/* רמז קטן – אם לא הצליח לטעון settings */}
-          {!uiLoaded ? <div style={{ marginTop: 10, opacity: 0.7, fontSize: 12 }}>טוען הגדרות עיצוב…</div> : null}
+          {!uiLoaded ? <div style={{ marginTop: 10, opacity: 0.7, fontSize: 14 }}>טוען הגדרות עיצוב…</div> : null}
         </section>
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
@@ -659,7 +659,7 @@ function btnSmall(
     color: "white",
     cursor: "pointer",
     fontWeight: 900,
-    fontSize: 13,
+    fontSize: 14,
     whiteSpace: "nowrap",
   };
 
@@ -708,7 +708,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     border: "1px solid rgba(255,255,255,0.18)",
     background: "rgba(255,255,255,0.06)",
-    fontSize: 12,
+    fontSize: 14,
     opacity: 0.95,
     fontWeight: 900,
   },
@@ -740,7 +740,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   label: {
     opacity: 0.95,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 900,
   },
   input: {
@@ -771,7 +771,7 @@ const styles: Record<string, React.CSSProperties> = {
   smallNote: {
     marginTop: 12,
     opacity: 0.85,
-    fontSize: 12,
+    fontSize: 14,
     lineHeight: 1.5,
   },
   list: {
@@ -799,7 +799,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   postMeta: {
     opacity: 0.78,
-    fontSize: 12,
+    fontSize: 13,
     display: "flex",
     gap: 10,
     alignItems: "center",
@@ -826,7 +826,7 @@ const styles: Record<string, React.CSSProperties> = {
   editHelp: {
     marginTop: 10,
     opacity: 0.85,
-    fontSize: 12,
+    fontSize: 14,
     lineHeight: 1.5,
   },
   media: {
