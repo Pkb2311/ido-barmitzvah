@@ -819,7 +819,7 @@ function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
 
 function BitIcon() {
   return (
-    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg width="50" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="13" cy="13" r="13" fill="#00C853" />
       <text x="13" y="17" textAnchor="middle" fontSize="12" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
         bit
