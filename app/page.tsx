@@ -15,13 +15,19 @@ type PostRow = {
   can_edit?: boolean; // מגיע מה-API
 };
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
+type UIButtonCfg = {
+  show: boolean;
+  label: string;
+  color: "default" | "danger" | "send";
+  custom_color?: string | null;
+};
+
 type UISettings = {
   theme: {
-    send_color: string; // שליחה (ירוק)
-    default_color: string; // ברירת מחדל (לרוב כתום)
+    send_color: string; // שליחה
+    default_color: string; // כפתורים רגילים
     danger_color: string; // מחיקה/הסר
-    bg: string; // צבע רקע
+    bg: string; // רקע
     card_bg: string; // רקע כרטיס
   };
   buttons: {
@@ -69,7 +75,7 @@ const DEFAULT_CONTENT: SiteContent = {
   event_kind: "בר מצווה",
   honoree_name: "עידו",
   header_title: "🎉 בר מצווה",
-  header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
+  header_subtitle: "כתבו ברכה. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
   form_title: "אשמח לברכה מרגשת ממך",
 };
 
@@ -79,7 +85,6 @@ const DEFAULT_PAYMENTS: PaymentSettings = {
   paybox_url: "",
   title: "🎁 שליחת מתנה",
 };
-
 
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
 
@@ -128,18 +133,13 @@ function safeMergeUI(remote: any): UISettings {
     refresh: { ...DEFAULT_UI.buttons.refresh, ...(remote.buttons?.refresh || {}) },
   };
 
-  // validate color enums
   (Object.keys(buttons) as Array<keyof UISettings["buttons"]>).forEach((k) => {
     const c = (buttons[k] as any)?.color;
-    if (c !== "default" && c !== "danger" && c !== "send") {
-      (buttons[k] as any).color = DEFAULT_UI.buttons[k].color;
-    }
-    if (typeof (buttons[k] as any).show !== "boolean") {
-      (buttons[k] as any).show = DEFAULT_UI.buttons[k].show;
-    }
-    if (typeof (buttons[k] as any).label !== "string") {
-      (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
-    }
+    if (c !== "default" && c !== "danger" && c !== "send") (buttons[k] as any).color = DEFAULT_UI.buttons[k].color;
+
+    if (typeof (buttons[k] as any).show !== "boolean") (buttons[k] as any).show = DEFAULT_UI.buttons[k].show;
+    if (typeof (buttons[k] as any).label !== "string") (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
+
     const cc = (buttons[k] as any)?.custom_color;
     if (cc !== undefined && cc !== null) {
       if (typeof cc !== "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cc.trim())) {
@@ -162,7 +162,6 @@ export default function HomePage() {
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
   const [payments, setPayments] = useState<PaymentSettings>(DEFAULT_PAYMENTS);
-
   const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
@@ -189,12 +188,10 @@ export default function HomePage() {
   const pickFileRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
 
-  // token למכשיר
   useEffect(() => {
     setOwnerToken(getOrCreateOwnerToken());
   }, []);
 
-  // ניקוי preview url
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -217,10 +214,13 @@ export default function HomePage() {
     try {
       const res = await fetch("/api/settings", { cache: "no-store" as any });
       const j = await res.json().catch(() => ({}));
+
       const next = safeMergeUI(j?.ui);
       setUi(next);
+
       setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
       setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
+
       if (j?.payments && typeof j.payments === "object") {
         const p = j.payments as Partial<PaymentSettings>;
         setPayments({
@@ -232,19 +232,24 @@ export default function HomePage() {
       } else {
         setPayments(DEFAULT_PAYMENTS);
       }
+
       if (j?.content && typeof j.content === "object") {
         const c = j.content as Partial<SiteContent>;
         setContent({
           event_kind: typeof c.event_kind === "string" && c.event_kind.trim() ? c.event_kind : DEFAULT_CONTENT.event_kind,
-          honoree_name: typeof c.honoree_name === "string" && c.honoree_name.trim() ? c.honoree_name : DEFAULT_CONTENT.honoree_name,
-          header_title: typeof c.header_title === "string" && c.header_title.trim() ? c.header_title : DEFAULT_CONTENT.header_title,
+          honoree_name:
+            typeof c.honoree_name === "string" && c.honoree_name.trim() ? c.honoree_name : DEFAULT_CONTENT.honoree_name,
+          header_title:
+            typeof c.header_title === "string" && c.header_title.trim() ? c.header_title : DEFAULT_CONTENT.header_title,
           header_subtitle:
-            typeof c.header_subtitle === "string" && c.header_subtitle.trim() ? c.header_subtitle : DEFAULT_CONTENT.header_subtitle,
+            typeof c.header_subtitle === "string" && c.header_subtitle.trim()
+              ? c.header_subtitle
+              : DEFAULT_CONTENT.header_subtitle,
           form_title: typeof c.form_title === "string" && c.form_title.trim() ? c.form_title : DEFAULT_CONTENT.form_title,
         });
       }
     } catch {
-      // נשארים על DEFAULT_UI
+      // נשארים על ברירות מחדל
     } finally {
       setUiLoaded(true);
     }
@@ -315,11 +320,8 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בשליחה");
 
-      if (j?.approved === false) {
-        showToast("נשלח בהצלחה ✅ מחכה לאישור מנהל");
-      } else {
-        showToast("נשלח בהצלחה ✅");
-      }
+      if (j?.approved === false) showToast("נשלח בהצלחה ✅ מחכה לאישור מנהל");
+      else showToast("נשלח בהצלחה ✅");
 
       setName("");
       setMessage("");
@@ -358,7 +360,6 @@ export default function HomePage() {
       showToast("השם לא יכול להיות ריק");
       return;
     }
-
     if (!nextMsg) {
       showToast("הברכה לא יכולה להיות ריקה");
       return;
@@ -372,12 +373,7 @@ export default function HomePage() {
       const res = await apiFetch("/api/posts", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id,
-          name: nextName,
-          message: nextMsg,
-          link_url: nextL,
-        }),
+        body: JSON.stringify({ id, name: nextName, message: nextMsg, link_url: nextL }),
       });
 
       const j = await res.json().catch(() => ({}));
@@ -414,7 +410,6 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
-  // ---------- צבעי כפתורים מהניהול ----------
   function resolveBtnKind(cfg: UIButtonCfg, force?: "send") {
     if (force === "send") return "send";
     if (cfg.color === "send") return "send";
@@ -426,13 +421,9 @@ export default function HomePage() {
     <main
       style={{
         ...styles.page,
-        background:
-          `radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), ${ui.theme.bg}`,
-    }}
-      </main>
-);
-
-      >
+        background: `radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), ${ui.theme.bg}`,
+      }}
+    >
       <div style={styles.container}>
         <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
@@ -475,31 +466,27 @@ export default function HomePage() {
                 />
               )
             ) : null}
+
             <h1 style={styles.h1}>{content.header_title || `🎉 ${content.event_kind}`}</h1>
             <div style={styles.badge}>ברכות מרגשות מה-❤️: {count}</div>
           </div>
-          <p style={styles.sub}>
-            {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
-          </p>
-                {payments.paybox_url ? (
-                  <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" />
-                ) : null}
-              </div>
-            </div>
-          ) : null}
 
+          <p style={styles.sub}>
+            {content.header_subtitle ||
+              `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
+          </p>
         </header>
 
-
-{payments.enabled && (payments.bit_url || payments.paybox_url) ? (
-  <section style={{ ...styles.card, background: ui.theme.card_bg, ...styles.paymentsCard }}>
-    <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
-    <div style={styles.paymentsBtns}>
-      {payments.bit_url ? <PaymentIconLink href={payments.bit_url} label="Bit" kind="bit" /> : null}
-      {payments.paybox_url ? <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" /> : null}
-    </div>
-  </section>
-) : null}
+        {/* קוביית תשלומים נפרדת */}
+        {payments.enabled && (payments.bit_url || payments.paybox_url) ? (
+          <section style={{ ...styles.card, background: ui.theme.card_bg, ...styles.paymentsCard }}>
+            <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
+            <div style={styles.paymentsBtns}>
+              {payments.bit_url ? <PaymentIconLink href={payments.bit_url} label="Bit" kind="bit" /> : null}
+              {payments.paybox_url ? <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" /> : null}
+            </div>
+          </section>
+        ) : null}
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>{content.form_title || "אשמח לברכה מרגשת ממך"}</h2>
@@ -539,7 +526,7 @@ export default function HomePage() {
             ) : null}
           </div>
 
-          {/* כפתורים - מותאם מובייל */}
+          {/* כפתורים */}
           <div style={styles.actionsWrap}>
             {ui.buttons.upload.show ? (
               <button
@@ -598,7 +585,7 @@ export default function HomePage() {
               </button>
             ) : null}
 
-            {/* שליחה תמיד ירוק */}
+            {/* שליחה - כפתור רחב */}
             <button
               type="button"
               onClick={submit}
@@ -639,11 +626,8 @@ export default function HomePage() {
             </div>
           ) : null}
 
-          <div style={styles.smallNote}>
-            ✨ טיפ: מי ששלח ברכה יכול לערוך/למחוק אותה למשך שעה מרגע השליחה (רק מאותו מכשיר).
-          </div>
+          <div style={styles.smallNote}>✨ טיפ: מי ששלח ברכה יכול לערוך/למחוק אותה למשך שעה מרגע השליחה (רק מאותו מכשיר).</div>
 
-          {/* רמז קטן – אם לא הצליח לטעון settings */}
           {!uiLoaded ? <div style={{ marginTop: 10, opacity: 0.7, fontSize: 14 }}>טוען הגדרות עיצוב…</div> : null}
         </section>
 
@@ -667,9 +651,7 @@ export default function HomePage() {
                         <div style={styles.postName}>{p.name}</div>
                         <div style={styles.postMeta}>
                           {formatDate(p.created_at)}
-                          {canEdit ? (
-                            <span style={styles.editBadge}>עריכה זמינה: {formatTimeLeft(p.editable_until)}</span>
-                          ) : null}
+                          {canEdit ? <span style={styles.editBadge}>עריכה זמינה: {formatTimeLeft(p.editable_until)}</span> : null}
                         </div>
                       </div>
 
@@ -701,22 +683,12 @@ export default function HomePage() {
                     {isEditing ? (
                       <div style={{ marginTop: 10 }}>
                         <div style={styles.label}>שם</div>
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          style={styles.input}
-                          placeholder="השם שלכם"
-                        />
+                        <input value={editName} onChange={(e) => setEditName(e.target.value)} style={styles.input} placeholder="השם שלכם" />
 
                         <div style={{ height: 10 }} />
 
                         <div style={styles.label}>עריכת ברכה</div>
-                        <textarea
-                          value={editMessage}
-                          onChange={(e) => setEditMessage(e.target.value)}
-                          style={styles.textarea}
-                          rows={4}
-                        />
+                        <textarea value={editMessage} onChange={(e) => setEditMessage(e.target.value)} style={styles.textarea} rows={4} />
 
                         <div style={{ height: 10 }} />
 
@@ -728,9 +700,7 @@ export default function HomePage() {
                           style={styles.input}
                         />
 
-                        <div style={styles.editHelp}>
-                          לשינוי תמונה/וידאו: כרגע הכי פשוט למחוק את הברכה ולשלוח מחדש עם המדיה הנכונה.
-                        </div>
+                        <div style={styles.editHelp}>לשינוי תמונה/וידאו: כרגע הכי פשוט למחוק את הברכה ולשלוח מחדש עם המדיה הנכונה.</div>
                       </div>
                     ) : (
                       <>
@@ -766,8 +736,7 @@ export default function HomePage() {
   );
 }
 
-/** ---------- Buttons (theme-aware) ---------- **/
-
+/** ---------- Link Preview (YouTube + Unfurl + fallback) ---------- **/
 
 function isYouTubeUrl(url: string) {
   try {
@@ -832,7 +801,6 @@ function PaymentIconLink(props: { href: string; label: string; kind: "bit" | "pa
 
 function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
   const [failed, setFailed] = useState(false);
-
   const src = kind === "bit" ? "/images/bit.png" : "/images/paybox.png";
 
   if (failed) return kind === "bit" ? <BitIcon /> : <PayBoxIcon />;
@@ -850,8 +818,6 @@ function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
 }
 
 function BitIcon() {
-) {
-  // אייקון מינימלי (לא רשמי). אם תרצה לוגו רשמי, אפשר להחליף ל-img מה-public.
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="13" cy="13" r="13" fill="#00C853" />
@@ -922,9 +888,15 @@ function LinkPreview({ url }: { url: string }) {
           <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
             <div style={styles.linkCardTitle}>{data.title || data.site_name || url}</div>
             {data.description ? <div style={styles.linkCardDesc}>{data.description}</div> : null}
-            <div style={styles.linkCardDomain}>{(() => {
-              try { return new URL(url).hostname; } catch { return url; }
-            })()}</div>
+            <div style={styles.linkCardDomain}>
+              {(() => {
+                try {
+                  return new URL(url).hostname;
+                } catch {
+                  return url;
+                }
+              })()}
+            </div>
           </div>
         </a>
       ) : failed ? (
@@ -941,11 +913,9 @@ function LinkPreview({ url }: { url: string }) {
   );
 }
 
-function btn(
-  kind: "send" | "danger" | "default" | "disabled",
-  ui: UISettings,
-  overrideBg?: string | null
-): React.CSSProperties {
+/** ---------- Buttons (theme-aware) ---------- **/
+
+function btn(kind: "send" | "danger" | "default" | "disabled", ui: UISettings, overrideBg?: string | null): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
     borderRadius: 14,
@@ -961,22 +931,13 @@ function btn(
     return { ...base, background: overrideBg, borderColor: "rgba(255,255,255,0.25)" };
   }
 
-  if (kind === "send") {
-    return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
-  }
-  if (kind === "danger") {
-    return { ...base, background: ui.theme.danger_color, borderColor: "rgba(255,255,255,0.25)" };
-  }
-  if (kind === "disabled") {
-    return { ...base, opacity: 0.45, cursor: "not-allowed" };
-  }
+  if (kind === "send") return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
+  if (kind === "danger") return { ...base, background: ui.theme.danger_color, borderColor: "rgba(255,255,255,0.25)" };
+  if (kind === "disabled") return { ...base, opacity: 0.45, cursor: "not-allowed" };
   return { ...base, background: ui.theme.default_color, borderColor: "rgba(255,255,255,0.25)" };
 }
 
-function btnSmall(
-  kind: "send" | "danger" | "default",
-  ui: UISettings
-): React.CSSProperties {
+function btnSmall(kind: "send" | "danger" | "default", ui: UISettings): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 10px",
     borderRadius: 12,
@@ -1043,12 +1004,14 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.9,
     lineHeight: 1.6,
   },
-  paymentsWrap: {
-    marginTop: 14,
+  card: {
     border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 16,
-    padding: 12,
-    background: "rgba(255,255,255,0.03)",
+    borderRadius: 18,
+    padding: 16,
+    backdropFilter: "blur(10px)",
+  },
+  paymentsCard: {
+    // “קוביה” נפרדת לתשלומים
   },
   paymentsTitle: {
     fontWeight: 900,
@@ -1084,12 +1047,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 900,
     opacity: 0.92,
-  },
-  card: {
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 16,
-    backdropFilter: "blur(10px)",
   },
   h2: {
     margin: "0 0 12px 0",
