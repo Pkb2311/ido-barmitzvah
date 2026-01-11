@@ -12,10 +12,12 @@ export async function GET() {
   const supabase = supabasePublic();
   const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
 
-  if (error) return NextResponse.json({ ui: null, require_approval: true }, { status: 200 });
+  if (error) return NextResponse.json({ ui: null, require_approval: true, hero_image_url: null, hero_link_url: null }, { status: 200 });
 
   const require_approval = data?.value?.require_approval ?? true;
   const ui = data?.value?.ui ?? null;
+  const hero_image_url = typeof data?.value?.hero_image_url === "string" ? data.value.hero_image_url : null;
+  const hero_link_url = typeof data?.value?.hero_link_url === "string" ? data.value.hero_link_url : null;
 
-  return NextResponse.json({ require_approval, ui }, { status: 200 });
+  return NextResponse.json({ require_approval, ui, hero_image_url, hero_link_url }, { status: 200 });
 }

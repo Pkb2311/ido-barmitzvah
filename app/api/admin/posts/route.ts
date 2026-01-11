@@ -47,15 +47,20 @@ export async function PATCH(req: Request) {
 
   const id = String(body?.id || "").trim();
   const approved = parseBool(body?.approved);
+  const name = typeof body?.name === "string" ? body.name.trim() : null;
   const message = typeof body?.message === "string" ? body.message.trim() : null;
   const link_url = typeof body?.link_url === "string" ? body.link_url.trim() : null;
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
-  if (approved === null && message === null && link_url === null) {
+  if (approved === null && name === null && message === null && link_url === null) {
     return NextResponse.json({ error: "אין מה לעדכן" }, { status: 400 });
   }
 
   const patch: any = {};
   if (approved !== null) patch.approved = approved;
+  if (name !== null) {
+    if (!name) return NextResponse.json({ error: "השם לא יכול להיות ריק" }, { status: 400 });
+    patch.name = name;
+  }
   if (message !== null) patch.message = message;
   if (link_url !== null) patch.link_url = link_url || null;
 

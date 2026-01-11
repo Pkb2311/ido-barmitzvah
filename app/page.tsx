@@ -15,7 +15,7 @@ type PostRow = {
   can_edit?: boolean; // מגיע מה-API
 };
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
 type UISettings = {
   theme: {
     send_color: string; // שליחה (ירוק)
@@ -109,6 +109,14 @@ function safeMergeUI(remote: any): UISettings {
     if (typeof (buttons[k] as any).label !== "string") {
       (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
     }
+    const cc = (buttons[k] as any)?.custom_color;
+    if (cc !== undefined && cc !== null) {
+      if (typeof cc !== "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cc.trim())) {
+        (buttons[k] as any).custom_color = null;
+      } else {
+        (buttons[k] as any).custom_color = cc.trim();
+      }
+    }
   });
 
   return { theme, buttons };
@@ -119,6 +127,9 @@ export default function HomePage() {
 
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
   const [uiLoaded, setUiLoaded] = useState(false);
+
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +148,7 @@ export default function HomePage() {
 
   // עריכה
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [editLink, setEditLink] = useState("");
 
@@ -173,6 +185,8 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       const next = safeMergeUI(j?.ui);
       setUi(next);
+      setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
+      setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -267,19 +281,27 @@ export default function HomePage() {
 
   function startEdit(p: PostRow) {
     setEditingId(p.id);
+    setEditName(p.name || "");
     setEditMessage(p.message || "");
     setEditLink(p.link_url || "");
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setEditName("");
     setEditMessage("");
     setEditLink("");
   }
 
   async function saveEdit(id: string) {
+    const nextName = editName.trim();
     const nextMsg = editMessage.trim();
     const nextL = editLink.trim();
+
+    if (!nextName) {
+      showToast("השם לא יכול להיות ריק");
+      return;
+    }
 
     if (!nextMsg) {
       showToast("הברכה לא יכולה להיות ריקה");
@@ -296,6 +318,7 @@ export default function HomePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id,
+          name: nextName,
           message: nextMsg,
           link_url: nextL,
         }),
@@ -354,6 +377,45 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
+            {heroImageUrl ? (
+              heroLinkUrl ? (
+                <a
+                  href={heroLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="מעבר לאתר"
+                  style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+                >
+                  <img
+                    src={heroImageUrl}
+                    alt="תמונת הילד"
+                    style={{
+                      width: 92,
+                      height: 92,
+                      borderRadius: 999,
+                      objectFit: "cover",
+                      border: "2px solid rgba(255,255,255,0.35)",
+                      boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                      marginInlineEnd: 10,
+                    }}
+                  />
+                </a>
+              ) : (
+                <img
+                  src={heroImageUrl}
+                  alt="תמונת הילד"
+                  style={{
+                    width: 92,
+                    height: 92,
+                    borderRadius: 999,
+                    objectFit: "cover",
+                    border: "2px solid rgba(255,255,255,0.35)",
+                    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                    marginInlineEnd: 10,
+                  }}
+                />
+              )
+            ) : null}
             <h1 style={styles.h1}>🎉 בר מצווה</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
@@ -404,7 +466,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => pickFileRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.upload), ui)}
+                style={btn(resolveBtnKind(ui.buttons.upload), ui, ui.buttons.upload.custom_color)}
                 disabled={submitting}
               >
                 {ui.buttons.upload.label}
@@ -415,7 +477,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.camera), ui)}
+                style={btn(resolveBtnKind(ui.buttons.camera), ui, ui.buttons.camera.custom_color)}
                 disabled={submitting}
                 title="במובייל זה יפתח את המצלמה"
               >
@@ -427,7 +489,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setShowLink((v) => !v)}
-                style={btn(resolveBtnKind(ui.buttons.link), ui)}
+                style={btn(resolveBtnKind(ui.buttons.link), ui, ui.buttons.link.custom_color)}
                 disabled={submitting}
               >
                 {showLink ? "❌ הסתר קישור" : ui.buttons.link.label}
@@ -438,7 +500,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => onSelectFile(null)}
-                style={btn(resolveBtnKind(ui.buttons.remove), ui)}
+                style={btn(resolveBtnKind(ui.buttons.remove), ui, ui.buttons.remove.custom_color)}
                 disabled={submitting}
               >
                 {ui.buttons.remove.label}
@@ -449,7 +511,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={loadPosts}
-                style={btn(resolveBtnKind(ui.buttons.refresh), ui)}
+                style={btn(resolveBtnKind(ui.buttons.refresh), ui, ui.buttons.refresh.custom_color)}
                 disabled={loading || submitting}
                 title="טוען מחדש את רשימת הברכות מהשרת"
               >
@@ -559,6 +621,16 @@ export default function HomePage() {
 
                     {isEditing ? (
                       <div style={{ marginTop: 10 }}>
+                        <div style={styles.label}>שם</div>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          style={styles.input}
+                          placeholder="השם שלכם"
+                        />
+
+                        <div style={{ height: 10 }} />
+
                         <div style={styles.label}>עריכת ברכה</div>
                         <textarea
                           value={editMessage}
@@ -622,7 +694,8 @@ export default function HomePage() {
 
 function btn(
   kind: "send" | "danger" | "default" | "disabled",
-  ui: UISettings
+  ui: UISettings,
+  overrideBg?: string | null
 ): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
@@ -634,6 +707,10 @@ function btn(
     fontWeight: 900,
     width: "100%",
   };
+
+  if (overrideBg && kind !== "disabled") {
+    return { ...base, background: overrideBg, borderColor: "rgba(255,255,255,0.25)" };
+  }
 
   if (kind === "send") {
     return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
