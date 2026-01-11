@@ -428,8 +428,11 @@ export default function HomePage() {
         ...styles.page,
         background:
           `radial-gradient(900px 600px at 50% -10%, rgba(120,170,255,0.25), transparent 70%), ${ui.theme.bg}`,
-      }}
-    >
+    }}
+      </main>
+);
+
+      >
       <div style={styles.container}>
         <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
