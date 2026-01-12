@@ -346,6 +346,9 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
+  const payboxUrl = useMemo(() => (payments?.paybox_url || ENV_PAYBOX_URL || "").trim(), [payments?.paybox_url]);
+  const bitUrl = useMemo(() => (payments?.bit_url || ENV_BIT_URL || "").trim(), [payments?.bit_url]);
+
   // ---------- צבעי כפתורים מהניהול ----------
   function resolveBtnKind(cfg: UIButtonCfg, force?: "send") {
     if (force === "send") return "send";
