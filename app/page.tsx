@@ -809,9 +809,9 @@ function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
     <img
       src={src}
       alt=""
-      width={40}
+      width={80}
       height={40}
-      style={{ width: 40, height: 40, objectFit: "contain" }}
+      style={{ width: 80, height: 40, objectFit: "contain" }}
       onError={() => setFailed(true)}
     />
   );
@@ -819,9 +819,9 @@ function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
 
 function BitIcon() {
   return (
-    <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="30" cy="30" r="30" fill="#00C853" />
-      <text x="50" y="17" textAnchor="middle" fontSize="12" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
+    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="13" cy="13" r="13" fill="#00C853" />
+      <text x="13" y="17" textAnchor="middle" fontSize="12" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
         bit
       </text>
     </svg>
