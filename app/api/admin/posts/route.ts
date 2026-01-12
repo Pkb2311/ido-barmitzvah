@@ -4,6 +4,10 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabaseServer";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+
 type AdminPostRow = {
   id: string;
   created_at: string;
@@ -38,7 +42,7 @@ export async function GET(req: Request) {
     .limit(500);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: (data || []) as AdminPostRow[] }, { status: 200 });
+  return NextResponse.json({ data: (data || []) as AdminPostRow[] }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function PATCH(req: Request) {
@@ -47,21 +51,26 @@ export async function PATCH(req: Request) {
 
   const id = String(body?.id || "").trim();
   const approved = parseBool(body?.approved);
+  const name = typeof body?.name === "string" ? body.name.trim() : null;
   const message = typeof body?.message === "string" ? body.message.trim() : null;
   const link_url = typeof body?.link_url === "string" ? body.link_url.trim() : null;
   if (!id) return NextResponse.json({ error: "חסר id" }, { status: 400 });
-  if (approved === null && message === null && link_url === null) {
+  if (approved === null && name === null && message === null && link_url === null) {
     return NextResponse.json({ error: "אין מה לעדכן" }, { status: 400 });
   }
 
   const patch: any = {};
   if (approved !== null) patch.approved = approved;
+  if (name !== null) {
+    if (!name) return NextResponse.json({ error: "השם לא יכול להיות ריק" }, { status: 400 });
+    patch.name = name;
+  }
   if (message !== null) patch.message = message;
   if (link_url !== null) patch.link_url = link_url || null;
 
   const { error } = await supabase.from("posts").update(patch).eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json({ ok: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function DELETE(req: Request) {
@@ -72,5 +81,5 @@ export async function DELETE(req: Request) {
 
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json({ ok: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }

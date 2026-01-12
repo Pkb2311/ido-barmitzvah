@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { AdminNav } from "./AdminNav";
 
 type PostRow = {
   id: string;
@@ -14,7 +15,7 @@ type PostRow = {
   approved: boolean;
 };
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
 type UISettings = {
   theme: {
     send_color: string;
@@ -80,6 +81,7 @@ export default function AdminPage() {
 
   // עריכה ע"י מנהל
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [editLink, setEditLink] = useState("");
 
@@ -155,20 +157,28 @@ export default function AdminPage() {
 
   function startEdit(row: PostRow) {
     setEditingId(row.id);
+    setEditName(row.name || "");
     setEditMessage(row.message || "");
     setEditLink(row.link_url || "");
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setEditName("");
     setEditMessage("");
     setEditLink("");
   }
 
   async function saveEdit() {
     if (!editingId) return;
+    const nextName = editName.trim();
     const msg = editMessage.trim();
     const link = editLink.trim();
+
+    if (!nextName) {
+      setErr("השם לא יכול להיות ריק");
+      return;
+    }
 
     if (!msg) {
       setErr("הברכה לא יכולה להיות ריקה");
@@ -184,7 +194,7 @@ export default function AdminPage() {
       const res = await fetch("/api/admin/posts", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editingId, message: msg, link_url: link }),
+        body: JSON.stringify({ id: editingId, name: nextName, message: msg, link_url: link }),
       });
 
       const j = await res.json().catch(() => ({}));
@@ -252,6 +262,7 @@ export default function AdminPage() {
   return (
     <div style={styles.page}>
       <h1 style={styles.h1}>ניהול</h1>
+      <AdminNav current="posts" />
       <p style={styles.sub}>
         ממתינים: <b>{stats.pending}</b> · מאושרים: <b>{stats.approved}</b>
       </p>
@@ -399,6 +410,8 @@ export default function AdminPage() {
                 onSecondaryAction={(id) => deletePost(id)}
                 onEdit={startEdit}
                 editingId={editingId}
+                editName={editName}
+                setEditName={setEditName}
                 editMessage={editMessage}
                 editLink={editLink}
                 setEditMessage={setEditMessage}
@@ -416,6 +429,8 @@ export default function AdminPage() {
                 onSecondaryAction={(id) => deletePost(id)}
                 onEdit={startEdit}
                 editingId={editingId}
+                editName={editName}
+                setEditName={setEditName}
                 editMessage={editMessage}
                 editLink={editLink}
                 setEditMessage={setEditMessage}
@@ -493,6 +508,8 @@ function Section(props: {
   onSecondaryAction: (id: string) => void;
   onEdit: (row: PostRow) => void;
   editingId: string | null;
+  editName: string;
+  setEditName: (v: string) => void;
   editMessage: string;
   editLink: string;
   setEditMessage: (v: string) => void;
@@ -509,6 +526,8 @@ function Section(props: {
     onSecondaryAction,
     onEdit,
     editingId,
+    editName,
+    setEditName,
     editMessage,
     editLink,
     setEditMessage,
@@ -559,6 +578,11 @@ function Section(props: {
 
               {editingId === r.id ? (
                 <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  <label style={styles.field}>
+                    <div style={styles.label}>שם</div>
+                    <input value={editName} onChange={(e) => setEditName(e.target.value)} style={styles.smallInput} />
+                  </label>
+
                   <label style={styles.field}>
                     <div style={styles.label}>ברכה</div>
                     <textarea
