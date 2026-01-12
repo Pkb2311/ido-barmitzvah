@@ -810,8 +810,8 @@ function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
       src={src}
       alt=""
       width={80}
-      height={40}
-      style={{ width: 80, height: 40, objectFit: "contain" }}
+      height={80}
+      style={{ width: 80, height: 80, objectFit: "contain" }}
       onError={() => setFailed(true)}
     />
   );
