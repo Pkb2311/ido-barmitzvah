@@ -1,3 +1,6 @@
+
+const PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
+const BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
 "use client";
 
 import type React from "react";
@@ -15,7 +18,7 @@ type PostRow = {
   can_edit?: boolean; // מגיע מה-API
 };
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
 type UISettings = {
   theme: {
     send_color: string; // שליחה (ירוק)
@@ -31,21 +34,6 @@ type UISettings = {
     remove: UIButtonCfg;
     refresh: UIButtonCfg;
   };
-};
-
-type SiteContent = {
-  event_kind: string;
-  honoree_name: string;
-  header_title: string;
-  header_subtitle: string;
-  form_title: string;
-};
-
-type PaymentSettings = {
-  enabled: boolean;
-  bit_url: string;
-  paybox_url: string;
-  title?: string;
 };
 
 const DEFAULT_UI: UISettings = {
@@ -64,22 +52,6 @@ const DEFAULT_UI: UISettings = {
     refresh: { show: true, label: "רענון", color: "default" },
   },
 };
-
-const DEFAULT_CONTENT: SiteContent = {
-  event_kind: "בר מצווה",
-  honoree_name: "עידו",
-  header_title: "🎉 בר מצווה",
-  header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
-  form_title: "אשמח לברכה מרגשת ממך",
-};
-
-const DEFAULT_PAYMENTS: PaymentSettings = {
-  enabled: false,
-  bit_url: "",
-  paybox_url: "",
-  title: "🎁 שליחת מתנה",
-};
-
 
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
 
@@ -140,14 +112,6 @@ function safeMergeUI(remote: any): UISettings {
     if (typeof (buttons[k] as any).label !== "string") {
       (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
     }
-    const cc = (buttons[k] as any)?.custom_color;
-    if (cc !== undefined && cc !== null) {
-      if (typeof cc !== "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cc.trim())) {
-        (buttons[k] as any).custom_color = null;
-      } else {
-        (buttons[k] as any).custom_color = cc.trim();
-      }
-    }
   });
 
   return { theme, buttons };
@@ -158,12 +122,6 @@ export default function HomePage() {
 
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
   const [uiLoaded, setUiLoaded] = useState(false);
-
-  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
-  const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
-  const [payments, setPayments] = useState<PaymentSettings>(DEFAULT_PAYMENTS);
-
-  const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +140,6 @@ export default function HomePage() {
 
   // עריכה
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [editLink, setEditLink] = useState("");
 
@@ -219,30 +176,6 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       const next = safeMergeUI(j?.ui);
       setUi(next);
-      setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
-      setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
-      if (j?.payments && typeof j.payments === "object") {
-        const p = j.payments as Partial<PaymentSettings>;
-        setPayments({
-          enabled: typeof p.enabled === "boolean" ? p.enabled : DEFAULT_PAYMENTS.enabled,
-          bit_url: typeof p.bit_url === "string" ? p.bit_url : DEFAULT_PAYMENTS.bit_url,
-          paybox_url: typeof p.paybox_url === "string" ? p.paybox_url : DEFAULT_PAYMENTS.paybox_url,
-          title: typeof p.title === "string" ? p.title : DEFAULT_PAYMENTS.title,
-        });
-      } else {
-        setPayments(DEFAULT_PAYMENTS);
-      }
-      if (j?.content && typeof j.content === "object") {
-        const c = j.content as Partial<SiteContent>;
-        setContent({
-          event_kind: typeof c.event_kind === "string" && c.event_kind.trim() ? c.event_kind : DEFAULT_CONTENT.event_kind,
-          honoree_name: typeof c.honoree_name === "string" && c.honoree_name.trim() ? c.honoree_name : DEFAULT_CONTENT.honoree_name,
-          header_title: typeof c.header_title === "string" && c.header_title.trim() ? c.header_title : DEFAULT_CONTENT.header_title,
-          header_subtitle:
-            typeof c.header_subtitle === "string" && c.header_subtitle.trim() ? c.header_subtitle : DEFAULT_CONTENT.header_subtitle,
-          form_title: typeof c.form_title === "string" && c.form_title.trim() ? c.form_title : DEFAULT_CONTENT.form_title,
-        });
-      }
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -337,27 +270,19 @@ export default function HomePage() {
 
   function startEdit(p: PostRow) {
     setEditingId(p.id);
-    setEditName(p.name || "");
     setEditMessage(p.message || "");
     setEditLink(p.link_url || "");
   }
 
   function cancelEdit() {
     setEditingId(null);
-    setEditName("");
     setEditMessage("");
     setEditLink("");
   }
 
   async function saveEdit(id: string) {
-    const nextName = editName.trim();
     const nextMsg = editMessage.trim();
     const nextL = editLink.trim();
-
-    if (!nextName) {
-      showToast("השם לא יכול להיות ריק");
-      return;
-    }
 
     if (!nextMsg) {
       showToast("הברכה לא יכולה להיות ריקה");
@@ -374,7 +299,6 @@ export default function HomePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id,
-          name: nextName,
           message: nextMsg,
           link_url: nextL,
         }),
@@ -433,73 +357,61 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
-            {heroImageUrl ? (
-              heroLinkUrl ? (
-                <a
-                  href={heroLinkUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="מעבר לאתר"
-                  style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
-                >
-                  <img
-                    src={heroImageUrl}
-                    alt="תמונת הילד"
-                    style={{
-                      width: 92,
-                      height: 92,
-                      borderRadius: 999,
-                      objectFit: "cover",
-                      border: "2px solid rgba(255,255,255,0.35)",
-                      boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
-                      marginInlineEnd: 10,
-                    }}
-                  />
-                </a>
-              ) : (
-                <img
-                  src={heroImageUrl}
-                  alt="תמונת הילד"
-                  style={{
-                    width: 92,
-                    height: 92,
-                    borderRadius: 999,
-                    objectFit: "cover",
-                    border: "2px solid rgba(255,255,255,0.35)",
-                    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
-                    marginInlineEnd: 10,
-                  }}
-                />
-              )
-            ) : null}
-            <h1 style={styles.h1}>{content.header_title || `🎉 ${content.event_kind}`}</h1>
+            <h1 style={styles.h1}>🎉 בר מצווה</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>
-            {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
-          </p>
-                {payments.paybox_url ? (
-                  <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" />
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
+          <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
         </header>
 
 
-{payments.enabled && (payments.bit_url || payments.paybox_url) ? (
-  <section style={{ ...styles.card, background: ui.theme.card_bg, ...styles.paymentsCard }}>
-    <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
-    <div style={styles.paymentsBtns}>
-      {payments.bit_url ? <PaymentIconLink href={payments.bit_url} label="Bit" kind="bit" /> : null}
-      {payments.paybox_url ? <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" /> : null}
-    </div>
-  </section>
-) : null}
+        {(PAYBOX_URL || BIT_URL) ? (
+          <section style={{ ...styles.card, background: ui.theme.card_bg }}>
+            <h2 style={styles.h2}>🎁 שליחת מתנה</h2>
+
+            <div
+              style={{
+                ...styles.payGrid,
+                gridTemplateColumns: PAYBOX_URL && BIT_URL ? "1fr 1fr" : "1fr",
+              }}
+            >
+              {PAYBOX_URL ? (
+                <a
+                  href={PAYBOX_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.payBtn}
+                  aria-label="PayBox"
+                >
+                  <div style={styles.payLogoWrap}>
+                    <span style={styles.payLogoText}>PB</span>
+                  </div>
+                  <div style={styles.payLabel}>PayBox</div>
+                </a>
+              ) : null}
+
+              {BIT_URL ? (
+                <a
+                  href={BIT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.payBtn}
+                  aria-label="Bit"
+                >
+                  <div style={styles.payLogoWrap}>
+                    <span style={styles.payLogoText}>bit</span>
+                  </div>
+                  <div style={styles.payLabel}>Bit</div>
+                </a>
+              ) : null}
+            </div>
+
+            <div style={styles.payHint}>נפתח בחלון חדש</div>
+          </section>
+        ) : null}
+
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
-          <h2 style={styles.h2}>{content.form_title || "אשמח לברכה מרגשת ממך"}</h2>
+          <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
 
           <div style={styles.formGrid}>
             <label style={styles.field}>
@@ -542,7 +454,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => pickFileRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.upload), ui, ui.buttons.upload.custom_color)}
+                style={btn(resolveBtnKind(ui.buttons.upload), ui)}
                 disabled={submitting}
               >
                 {ui.buttons.upload.label}
@@ -553,7 +465,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.camera), ui, ui.buttons.camera.custom_color)}
+                style={btn(resolveBtnKind(ui.buttons.camera), ui)}
                 disabled={submitting}
                 title="במובייל זה יפתח את המצלמה"
               >
@@ -565,7 +477,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setShowLink((v) => !v)}
-                style={btn(resolveBtnKind(ui.buttons.link), ui, ui.buttons.link.custom_color)}
+                style={btn(resolveBtnKind(ui.buttons.link), ui)}
                 disabled={submitting}
               >
                 {showLink ? "❌ הסתר קישור" : ui.buttons.link.label}
@@ -576,7 +488,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => onSelectFile(null)}
-                style={btn(resolveBtnKind(ui.buttons.remove), ui, ui.buttons.remove.custom_color)}
+                style={btn(resolveBtnKind(ui.buttons.remove), ui)}
                 disabled={submitting}
               >
                 {ui.buttons.remove.label}
@@ -587,7 +499,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={loadPosts}
-                style={btn(resolveBtnKind(ui.buttons.refresh), ui, ui.buttons.refresh.custom_color)}
+                style={btn(resolveBtnKind(ui.buttons.refresh), ui)}
                 disabled={loading || submitting}
                 title="טוען מחדש את רשימת הברכות מהשרת"
               >
@@ -599,7 +511,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={submit}
-              style={{ ...(submitting ? btn("disabled", ui) : btn("send", ui)), gridColumn: "1 / -1", width: "100%" }}
+              style={submitting ? btn("disabled", ui) : btn("send", ui)}
               disabled={submitting}
             >
               {submitting ? "שולח…" : "שליחה"}
@@ -697,16 +609,6 @@ export default function HomePage() {
 
                     {isEditing ? (
                       <div style={{ marginTop: 10 }}>
-                        <div style={styles.label}>שם</div>
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          style={styles.input}
-                          placeholder="השם שלכם"
-                        />
-
-                        <div style={{ height: 10 }} />
-
                         <div style={styles.label}>עריכת ברכה</div>
                         <textarea
                           value={editMessage}
@@ -735,7 +637,10 @@ export default function HomePage() {
 
                         {p.link_url ? (
                           <div style={{ marginTop: 10 }}>
-                            <LinkPreview url={p.link_url} />
+                            🔗{" "}
+                            <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+                              {p.link_url}
+                            </a>
                           </div>
                         ) : null}
 
@@ -765,183 +670,9 @@ export default function HomePage() {
 
 /** ---------- Buttons (theme-aware) ---------- **/
 
-
-function isYouTubeUrl(url: string) {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-    return host === "youtu.be" || host.endsWith("youtube.com");
-  } catch {
-    return /(?:youtube\.com|youtu\.be)/i.test(url);
-  }
-}
-
-function extractYouTubeId(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-
-    if (host === "youtu.be") {
-      const id = u.pathname.split("/").filter(Boolean)[0];
-      return id || null;
-    }
-
-    if (host.endsWith("youtube.com")) {
-      const v = u.searchParams.get("v");
-      if (v) return v;
-
-      const parts = u.pathname.split("/").filter(Boolean);
-      const idx = parts.findIndex((p) => ["shorts", "live", "embed"].includes(p));
-      if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function getYouTubeEmbedUrl(url: string) {
-  const id = extractYouTubeId(url);
-  if (!id) return null;
-  return `https://www.youtube.com/embed/${id}`;
-}
-
-type UnfurlData = {
-  url: string;
-  title?: string;
-  description?: string;
-  image?: string;
-  site_name?: string;
-};
-
-function PaymentIconLink(props: { href: string; label: string; kind: "bit" | "paybox" }) {
-  const { href, label, kind } = props;
-  return (
-    <a href={href} target="_blank" rel="noreferrer" style={styles.payIconLink as any} title={label}>
-      <div style={styles.payIconCircle}>
-        <PaymentLogo kind={kind} />
-      </div>
-      <div style={styles.payIconLabel}>{label}</div>
-    </a>
-  );
-}
-
-function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
-  const [failed, setFailed] = useState(false);
-
-  const src = kind === "bit" ? "/images/bit.png" : "/images/paybox.png";
-
-  if (failed) return kind === "bit" ? <BitIcon /> : <PayBoxIcon />;
-
-  return (
-    <img
-      src={src}
-      alt=""
-      width={40}
-      height={40}
-      style={{ width: 40, height: 40, objectFit: "contain" }}
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
-function BitIcon() {
-) {
-  // אייקון מינימלי (לא רשמי). אם תרצה לוגו רשמי, אפשר להחליף ל-img מה-public.
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="13" cy="13" r="13" fill="#00C853" />
-      <text x="13" y="17" textAnchor="middle" fontSize="12" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
-        bit
-      </text>
-    </svg>
-  );
-}
-
-function PayBoxIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <circle cx="13" cy="13" r="13" fill="#1976D2" />
-      <text x="13" y="17" textAnchor="middle" fontSize="11" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
-        PB
-      </text>
-    </svg>
-  );
-}
-
-function LinkPreview({ url }: { url: string }) {
-  const [data, setData] = useState<UnfurlData | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    setFailed(false);
-    setData(null);
-
-    (async () => {
-      try {
-        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`, { cache: "no-store" as any });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(j?.error || "unfurl failed");
-        if (!alive) return;
-        setData(j?.data || null);
-      } catch {
-        if (!alive) return;
-        setFailed(true);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [url]);
-
-  const ytEmbed = isYouTubeUrl(url) ? getYouTubeEmbedUrl(url) : null;
-
-  return (
-    <div style={styles.linkPreviewWrap}>
-      {ytEmbed ? (
-        <div style={{ marginBottom: 10 }}>
-          <iframe
-            src={ytEmbed}
-            title="YouTube"
-            style={{ width: "100%", aspectRatio: "16/9", border: 0, borderRadius: 12 }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      ) : null}
-
-      {data ? (
-        <a href={url} target="_blank" rel="noreferrer" style={styles.linkCard as any}>
-          {data.image ? <img src={data.image} alt="" style={styles.linkCardImg} /> : null}
-          <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
-            <div style={styles.linkCardTitle}>{data.title || data.site_name || url}</div>
-            {data.description ? <div style={styles.linkCardDesc}>{data.description}</div> : null}
-            <div style={styles.linkCardDomain}>{(() => {
-              try { return new URL(url).hostname; } catch { return url; }
-            })()}</div>
-          </div>
-        </a>
-      ) : failed ? (
-        <div>
-          🔗{" "}
-          <a href={url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
-            {url}
-          </a>
-        </div>
-      ) : (
-        <div style={{ opacity: 0.75 }}>טוען תצוגה מקדימה…</div>
-      )}
-    </div>
-  );
-}
-
 function btn(
   kind: "send" | "danger" | "default" | "disabled",
-  ui: UISettings,
-  overrideBg?: string | null
+  ui: UISettings
 ): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
@@ -953,10 +684,6 @@ function btn(
     fontWeight: 900,
     width: "100%",
   };
-
-  if (overrideBg && kind !== "disabled") {
-    return { ...base, background: overrideBg, borderColor: "rgba(255,255,255,0.25)" };
-  }
 
   if (kind === "send") {
     return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
@@ -1040,48 +767,6 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.9,
     lineHeight: 1.6,
   },
-  paymentsWrap: {
-    marginTop: 14,
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 16,
-    padding: 12,
-    background: "rgba(255,255,255,0.03)",
-  },
-  paymentsTitle: {
-    fontWeight: 900,
-    marginBottom: 10,
-    opacity: 0.95,
-  },
-  paymentsBtns: {
-    display: "flex",
-    gap: 14,
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  payIconLink: {
-    display: "inline-flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 6,
-    textDecoration: "none",
-    color: "white",
-    minWidth: 64,
-  },
-  payIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    display: "grid",
-    placeItems: "center",
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(0,0,0,0.20)",
-    boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
-  },
-  payIconLabel: {
-    fontSize: 13,
-    fontWeight: 900,
-    opacity: 0.92,
-  },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
@@ -1097,6 +782,52 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "1fr",
     gap: 12,
+  },
+
+  payGrid: {
+    marginTop: 12,
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  payBtn: {
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    borderRadius: 22,
+    padding: 14,
+    minHeight: 96,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    textDecoration: "none",
+    color: "white",
+    fontWeight: 900,
+  },
+  payLogoWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(0,0,0,0.15)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payLogoText: {
+    fontSize: 18,
+    letterSpacing: 0.2,
+  },
+  payLabel: {
+    fontSize: 16,
+    opacity: 0.95,
+  },
+  payHint: {
+    marginTop: 10,
+    opacity: 0.75,
+    fontSize: 13,
+    textAlign: "center",
   },
   field: {
     display: "flex",
@@ -1187,52 +918,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 10,
     whiteSpace: "pre-wrap",
     lineHeight: 1.6,
-  },
-  linkPreviewWrap: {
-    marginTop: 8,
-  },
-  linkCard: {
-    display: "flex",
-    gap: 10,
-    alignItems: "stretch",
-    textDecoration: "none",
-    color: "white",
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.18)",
-    borderRadius: 14,
-    overflow: "hidden",
-    padding: 10,
-  },
-  linkCardImg: {
-    width: 92,
-    height: 72,
-    objectFit: "cover",
-    borderRadius: 12,
-    flex: "0 0 auto",
-  },
-  linkCardTitle: {
-    fontWeight: 900,
-    fontSize: 14,
-    lineHeight: 1.3,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  linkCardDesc: {
-    fontSize: 13,
-    opacity: 0.85,
-    lineHeight: 1.35,
-    overflow: "hidden",
-    display: "-webkit-box",
-    WebkitLineClamp: 2 as any,
-    WebkitBoxOrient: "vertical" as any,
-  },
-  linkCardDomain: {
-    fontSize: 12,
-    opacity: 0.75,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   editHelp: {
     marginTop: 10,

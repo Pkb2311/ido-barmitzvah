@@ -177,7 +177,6 @@ export async function PATCH(req: Request) {
 
   const body = await req.json().catch(() => null);
   const id = String(body?.id || "").trim();
-  const nextName = typeof body?.name === "string" ? body.name.trim() : null;
   const nextMessage = typeof body?.message === "string" ? body.message.trim() : null;
   const nextLink = typeof body?.link_url === "string" ? body.link_url.trim() : null;
 
@@ -213,16 +212,8 @@ export async function PATCH(req: Request) {
   }
 
   const patch: any = {};
-  if (nextName !== null) {
-    if (!nextName) return NextResponse.json({ error: "השם לא יכול להיות ריק" }, { status: 400 });
-    patch.name = nextName;
-  }
   if (nextMessage !== null) patch.message = nextMessage;
   if (nextLink !== null) patch.link_url = nextLink || null;
-
-  if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: "אין מה לעדכן" }, { status: 400 });
-  }
 
   const { error: upErr } = await supabase.from("posts").update(patch).eq("id", id);
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
