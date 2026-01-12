@@ -1,6 +1,3 @@
-
-const PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
-const BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
 "use client";
 
 import type React from "react";
@@ -362,53 +359,6 @@ export default function HomePage() {
           </div>
           <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
         </header>
-
-
-        {(PAYBOX_URL || BIT_URL) ? (
-          <section style={{ ...styles.card, background: ui.theme.card_bg }}>
-            <h2 style={styles.h2}>🎁 שליחת מתנה</h2>
-
-            <div
-              style={{
-                ...styles.payGrid,
-                gridTemplateColumns: PAYBOX_URL && BIT_URL ? "1fr 1fr" : "1fr",
-              }}
-            >
-              {PAYBOX_URL ? (
-                <a
-                  href={PAYBOX_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={styles.payBtn}
-                  aria-label="PayBox"
-                >
-                  <div style={styles.payLogoWrap}>
-                    <span style={styles.payLogoText}>PB</span>
-                  </div>
-                  <div style={styles.payLabel}>PayBox</div>
-                </a>
-              ) : null}
-
-              {BIT_URL ? (
-                <a
-                  href={BIT_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={styles.payBtn}
-                  aria-label="Bit"
-                >
-                  <div style={styles.payLogoWrap}>
-                    <span style={styles.payLogoText}>bit</span>
-                  </div>
-                  <div style={styles.payLabel}>Bit</div>
-                </a>
-              ) : null}
-            </div>
-
-            <div style={styles.payHint}>נפתח בחלון חדש</div>
-          </section>
-        ) : null}
-
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
@@ -782,52 +732,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "1fr",
     gap: 12,
-  },
-
-  payGrid: {
-    marginTop: 12,
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
-  },
-  payBtn: {
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 96,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    textDecoration: "none",
-    color: "white",
-    fontWeight: 900,
-  },
-  payLogoWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.22)",
-    background: "rgba(0,0,0,0.15)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  payLogoText: {
-    fontSize: 18,
-    letterSpacing: 0.2,
-  },
-  payLabel: {
-    fontSize: 16,
-    opacity: 0.95,
-  },
-  payHint: {
-    marginTop: 10,
-    opacity: 0.75,
-    fontSize: 13,
-    textAlign: "center",
   },
   field: {
     display: "flex",
