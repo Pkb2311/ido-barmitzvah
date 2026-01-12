@@ -3,10 +3,6 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const ENV_PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
-const ENV_BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
-
-
 type PostRow = {
   id: string;
   created_at: string;
@@ -19,12 +15,7 @@ type PostRow = {
   can_edit?: boolean; // מגיע מה-API
 };
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
-type PaymentSettings = {
-  paybox_url?: string;
-  bit_url?: string;
-};
-
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
 type UISettings = {
   theme: {
     send_color: string; // שליחה (ירוק)
@@ -40,6 +31,21 @@ type UISettings = {
     remove: UIButtonCfg;
     refresh: UIButtonCfg;
   };
+};
+
+type SiteContent = {
+  event_kind: string;
+  honoree_name: string;
+  header_title: string;
+  header_subtitle: string;
+  form_title: string;
+};
+
+type PaymentSettings = {
+  enabled: boolean;
+  bit_url: string;
+  paybox_url: string;
+  title?: string;
 };
 
 const DEFAULT_UI: UISettings = {
@@ -58,6 +64,22 @@ const DEFAULT_UI: UISettings = {
     refresh: { show: true, label: "רענון", color: "default" },
   },
 };
+
+const DEFAULT_CONTENT: SiteContent = {
+  event_kind: "בר מצווה",
+  honoree_name: "עידו",
+  header_title: "🎉 בר מצווה",
+  header_subtitle: "כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.",
+  form_title: "אשמח לברכה מרגשת ממך",
+};
+
+const DEFAULT_PAYMENTS: PaymentSettings = {
+  enabled: false,
+  bit_url: "",
+  paybox_url: "",
+  title: "🎁 שליחת מתנה",
+};
+
 
 const OWNER_TOKEN_KEY = "ido_owner_token_v1";
 
@@ -118,6 +140,14 @@ function safeMergeUI(remote: any): UISettings {
     if (typeof (buttons[k] as any).label !== "string") {
       (buttons[k] as any).label = DEFAULT_UI.buttons[k].label;
     }
+    const cc = (buttons[k] as any)?.custom_color;
+    if (cc !== undefined && cc !== null) {
+      if (typeof cc !== "string" || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(cc.trim())) {
+        (buttons[k] as any).custom_color = null;
+      } else {
+        (buttons[k] as any).custom_color = cc.trim();
+      }
+    }
   });
 
   return { theme, buttons };
@@ -127,8 +157,13 @@ export default function HomePage() {
   const [ownerToken, setOwnerToken] = useState("");
 
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
-  const [payments, setPayments] = useState<PaymentSettings>({});
   const [uiLoaded, setUiLoaded] = useState(false);
+
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [heroLinkUrl, setHeroLinkUrl] = useState<string | null>(null);
+  const [payments, setPayments] = useState<PaymentSettings>(DEFAULT_PAYMENTS);
+
+  const [content, setContent] = useState<SiteContent>(DEFAULT_CONTENT);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,6 +182,7 @@ export default function HomePage() {
 
   // עריכה
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
   const [editMessage, setEditMessage] = useState("");
   const [editLink, setEditLink] = useState("");
 
@@ -183,7 +219,30 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       const next = safeMergeUI(j?.ui);
       setUi(next);
-      setPayments((j?.payments as PaymentSettings) || (j?.gift as PaymentSettings) || {});
+      setHeroImageUrl(typeof j?.hero_image_url === "string" ? j.hero_image_url : null);
+      setHeroLinkUrl(typeof j?.hero_link_url === "string" ? j.hero_link_url : null);
+      if (j?.payments && typeof j.payments === "object") {
+        const p = j.payments as Partial<PaymentSettings>;
+        setPayments({
+          enabled: typeof p.enabled === "boolean" ? p.enabled : DEFAULT_PAYMENTS.enabled,
+          bit_url: typeof p.bit_url === "string" ? p.bit_url : DEFAULT_PAYMENTS.bit_url,
+          paybox_url: typeof p.paybox_url === "string" ? p.paybox_url : DEFAULT_PAYMENTS.paybox_url,
+          title: typeof p.title === "string" ? p.title : DEFAULT_PAYMENTS.title,
+        });
+      } else {
+        setPayments(DEFAULT_PAYMENTS);
+      }
+      if (j?.content && typeof j.content === "object") {
+        const c = j.content as Partial<SiteContent>;
+        setContent({
+          event_kind: typeof c.event_kind === "string" && c.event_kind.trim() ? c.event_kind : DEFAULT_CONTENT.event_kind,
+          honoree_name: typeof c.honoree_name === "string" && c.honoree_name.trim() ? c.honoree_name : DEFAULT_CONTENT.honoree_name,
+          header_title: typeof c.header_title === "string" && c.header_title.trim() ? c.header_title : DEFAULT_CONTENT.header_title,
+          header_subtitle:
+            typeof c.header_subtitle === "string" && c.header_subtitle.trim() ? c.header_subtitle : DEFAULT_CONTENT.header_subtitle,
+          form_title: typeof c.form_title === "string" && c.form_title.trim() ? c.form_title : DEFAULT_CONTENT.form_title,
+        });
+      }
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -278,19 +337,27 @@ export default function HomePage() {
 
   function startEdit(p: PostRow) {
     setEditingId(p.id);
+    setEditName(p.name || "");
     setEditMessage(p.message || "");
     setEditLink(p.link_url || "");
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setEditName("");
     setEditMessage("");
     setEditLink("");
   }
 
   async function saveEdit(id: string) {
+    const nextName = editName.trim();
     const nextMsg = editMessage.trim();
     const nextL = editLink.trim();
+
+    if (!nextName) {
+      showToast("השם לא יכול להיות ריק");
+      return;
+    }
 
     if (!nextMsg) {
       showToast("הברכה לא יכולה להיות ריקה");
@@ -307,6 +374,7 @@ export default function HomePage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id,
+          name: nextName,
           message: nextMsg,
           link_url: nextL,
         }),
@@ -346,9 +414,6 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
-  const payboxUrl = useMemo(() => (payments?.paybox_url || ENV_PAYBOX_URL || "").trim(), [payments?.paybox_url]);
-  const bitUrl = useMemo(() => (payments?.bit_url || ENV_BIT_URL || "").trim(), [payments?.bit_url]);
-
   // ---------- צבעי כפתורים מהניהול ----------
   function resolveBtnKind(cfg: UIButtonCfg, force?: "send") {
     if (force === "send") return "send";
@@ -368,61 +433,77 @@ export default function HomePage() {
       <div style={styles.container}>
         <header style={{ ...styles.header, background: ui.theme.card_bg }}>
           <div style={styles.headerTop}>
-            <h1 style={styles.h1}>🎉 בר מצווה</h1>
+            {heroImageUrl ? (
+              heroLinkUrl ? (
+                <a
+                  href={heroLinkUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="מעבר לאתר"
+                  style={{ display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+                >
+                  <img
+                    src={heroImageUrl}
+                    alt="תמונת הילד"
+                    style={{
+                      width: 92,
+                      height: 92,
+                      borderRadius: 999,
+                      objectFit: "cover",
+                      border: "2px solid rgba(255,255,255,0.35)",
+                      boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                      marginInlineEnd: 10,
+                    }}
+                  />
+                </a>
+              ) : (
+                <img
+                  src={heroImageUrl}
+                  alt="תמונת הילד"
+                  style={{
+                    width: 92,
+                    height: 92,
+                    borderRadius: 999,
+                    objectFit: "cover",
+                    border: "2px solid rgba(255,255,255,0.35)",
+                    boxShadow: "0 12px 30px rgba(0,0,0,0.35)",
+                    marginInlineEnd: 10,
+                  }}
+                />
+              )
+            ) : null}
+            <h1 style={styles.h1}>{content.header_title || `🎉 ${content.event_kind}`}</h1>
             <div style={styles.badge}>ברכות מאושרות: {count}</div>
           </div>
-          <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
+          <p style={styles.sub}>
+            {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
+          </p>
+          {payments.enabled && (payments.bit_url || payments.paybox_url) ? (
+            <div style={styles.paymentsWrap}>
+              <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
+              <div style={styles.paymentsBtns}>
+                {payments.bit_url ? (
+                  <a href={payments.bit_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    <button type="button" style={btn("default", ui)}>
+                      Bit
+                    </button>
+                  </a>
+                ) : null}
+                {payments.paybox_url ? (
+                  <a href={payments.paybox_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                    <button type="button" style={btn("default", ui)}>
+                      PayBox
+                    </button>
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
         </header>
 
-
-        {(payboxUrl || bitUrl) ? (
-          <section style={{ ...styles.card, background: ui.theme.card_bg }}>
-            <h2 style={styles.h2}>🎁 שליחת מתנה</h2>
-
-            <div
-              style={{
-                ...styles.payGrid,
-                gridTemplateColumns: payboxUrl && bitUrl ? "1fr 1fr" : "1fr",
-              }}
-            >
-              {payboxUrl ? (
-                <a
-                  href={payboxUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={styles.payBtn}
-                  aria-label="PayBox"
-                >
-                  <div style={styles.payLogoWrap}>
-                    <img src="/payments/paybox.png" alt="PayBox" style={styles.payLogoImg as any} />
-                  </div>
-                  <div style={styles.payLabel}>PayBox</div>
-                </a>
-              ) : null}
-
-              {bitUrl ? (
-                <a
-                  href={bitUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={styles.payBtn}
-                  aria-label="Bit"
-                >
-                  <div style={styles.payLogoWrap}>
-                    <img src="/payments/bit.png" alt="Bit" style={styles.payLogoImg as any} />
-                  </div>
-                  <div style={styles.payLabel}>Bit</div>
-                </a>
-              ) : null}
-            </div>
-
-            <div style={styles.payHint}>נפתח בחלון חדש</div>
-          </section>
-        ) : null}
-
-
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
-          <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
+          <h2 style={styles.h2}>{content.form_title || "אשמח לברכה מרגשת ממך"}</h2>
 
           <div style={styles.formGrid}>
             <label style={styles.field}>
@@ -465,7 +546,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => pickFileRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.upload), ui)}
+                style={btn(resolveBtnKind(ui.buttons.upload), ui, ui.buttons.upload.custom_color)}
                 disabled={submitting}
               >
                 {ui.buttons.upload.label}
@@ -476,7 +557,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => cameraRef.current?.click()}
-                style={btn(resolveBtnKind(ui.buttons.camera), ui)}
+                style={btn(resolveBtnKind(ui.buttons.camera), ui, ui.buttons.camera.custom_color)}
                 disabled={submitting}
                 title="במובייל זה יפתח את המצלמה"
               >
@@ -488,7 +569,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setShowLink((v) => !v)}
-                style={btn(resolveBtnKind(ui.buttons.link), ui)}
+                style={btn(resolveBtnKind(ui.buttons.link), ui, ui.buttons.link.custom_color)}
                 disabled={submitting}
               >
                 {showLink ? "❌ הסתר קישור" : ui.buttons.link.label}
@@ -499,7 +580,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => onSelectFile(null)}
-                style={btn(resolveBtnKind(ui.buttons.remove), ui)}
+                style={btn(resolveBtnKind(ui.buttons.remove), ui, ui.buttons.remove.custom_color)}
                 disabled={submitting}
               >
                 {ui.buttons.remove.label}
@@ -510,7 +591,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={loadPosts}
-                style={btn(resolveBtnKind(ui.buttons.refresh), ui)}
+                style={btn(resolveBtnKind(ui.buttons.refresh), ui, ui.buttons.refresh.custom_color)}
                 disabled={loading || submitting}
                 title="טוען מחדש את רשימת הברכות מהשרת"
               >
@@ -522,7 +603,7 @@ export default function HomePage() {
             <button
               type="button"
               onClick={submit}
-              style={submitting ? btn("disabled", ui) : btn("send", ui)}
+              style={{ ...(submitting ? btn("disabled", ui) : btn("send", ui)), gridColumn: "1 / -1", width: "100%" }}
               disabled={submitting}
             >
               {submitting ? "שולח…" : "שליחה"}
@@ -620,6 +701,16 @@ export default function HomePage() {
 
                     {isEditing ? (
                       <div style={{ marginTop: 10 }}>
+                        <div style={styles.label}>שם</div>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          style={styles.input}
+                          placeholder="השם שלכם"
+                        />
+
+                        <div style={{ height: 10 }} />
+
                         <div style={styles.label}>עריכת ברכה</div>
                         <textarea
                           value={editMessage}
@@ -648,10 +739,7 @@ export default function HomePage() {
 
                         {p.link_url ? (
                           <div style={{ marginTop: 10 }}>
-                            🔗{" "}
-                            <a href={p.link_url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
-                              {p.link_url}
-                            </a>
+                            <LinkPreview url={p.link_url} />
                           </div>
                         ) : null}
 
@@ -681,9 +769,107 @@ export default function HomePage() {
 
 /** ---------- Buttons (theme-aware) ---------- **/
 
+
+function isYouTubeUrl(url: string) {
+  return /(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(url);
+}
+
+function getYouTubeEmbedUrl(url: string) {
+  try {
+    const u = new URL(url);
+    let id = "";
+    if (u.hostname.includes("youtu.be")) {
+      id = u.pathname.replace("/", "");
+    } else {
+      id = u.searchParams.get("v") || "";
+    }
+    if (!id) return null;
+    return `https://www.youtube.com/embed/${id}`;
+  } catch {
+    return null;
+  }
+}
+
+type UnfurlData = {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  site_name?: string;
+};
+
+function LinkPreview({ url }: { url: string }) {
+  const [data, setData] = useState<UnfurlData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setFailed(false);
+    setData(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`, { cache: "no-store" as any });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j?.error || "unfurl failed");
+        if (!alive) return;
+        setData(j?.data || null);
+      } catch {
+        if (!alive) return;
+        setFailed(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  const ytEmbed = isYouTubeUrl(url) ? getYouTubeEmbedUrl(url) : null;
+
+  return (
+    <div style={styles.linkPreviewWrap}>
+      {ytEmbed ? (
+        <div style={{ marginBottom: 10 }}>
+          <iframe
+            src={ytEmbed}
+            title="YouTube"
+            style={{ width: "100%", aspectRatio: "16/9", border: 0, borderRadius: 12 }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : null}
+
+      {data ? (
+        <a href={url} target="_blank" rel="noreferrer" style={styles.linkCard as any}>
+          {data.image ? <img src={data.image} alt="" style={styles.linkCardImg} /> : null}
+          <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+            <div style={styles.linkCardTitle}>{data.title || data.site_name || url}</div>
+            {data.description ? <div style={styles.linkCardDesc}>{data.description}</div> : null}
+            <div style={styles.linkCardDomain}>{(() => {
+              try { return new URL(url).hostname; } catch { return url; }
+            })()}</div>
+          </div>
+        </a>
+      ) : failed ? (
+        <div>
+          🔗{" "}
+          <a href={url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+            {url}
+          </a>
+        </div>
+      ) : (
+        <div style={{ opacity: 0.75 }}>טוען תצוגה מקדימה…</div>
+      )}
+    </div>
+  );
+}
+
 function btn(
   kind: "send" | "danger" | "default" | "disabled",
-  ui: UISettings
+  ui: UISettings,
+  overrideBg?: string | null
 ): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "12px 12px",
@@ -695,6 +881,10 @@ function btn(
     fontWeight: 900,
     width: "100%",
   };
+
+  if (overrideBg && kind !== "disabled") {
+    return { ...base, background: overrideBg, borderColor: "rgba(255,255,255,0.25)" };
+  }
 
   if (kind === "send") {
     return { ...base, background: ui.theme.send_color, borderColor: "rgba(255,255,255,0.25)" };
@@ -793,52 +983,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "1fr",
     gap: 12,
-  },
-
-  payGrid: {
-    marginTop: 12,
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: 12,
-  },
-  payBtn: {
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "rgba(255,255,255,0.06)",
-    borderRadius: 22,
-    padding: 14,
-    minHeight: 96,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    textDecoration: "none",
-    color: "white",
-    fontWeight: 900,
-  },
-  payLogoWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.22)",
-    background: "rgba(0,0,0,0.15)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  payLogoText: {
-    fontSize: 18,
-    letterSpacing: 0.2,
-  },
-  payLabel: {
-    fontSize: 16,
-    opacity: 0.95,
-  },
-  payHint: {
-    marginTop: 10,
-    opacity: 0.75,
-    fontSize: 13,
-    textAlign: "center",
   },
   field: {
     display: "flex",

@@ -35,16 +35,6 @@ export function AdminNav({ current }: Props) {
           {it.label}
         </a>
       ))}
-
-<a
-  href="/"
-  target="_blank"
-  rel="noreferrer"
-  style={pill(false)}
-  title="פתח את האתר בטאב חדש"
->
-  ↗ לאתר
-</a>
     </nav>
   );
 }

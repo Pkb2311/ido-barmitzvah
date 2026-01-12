@@ -2,8 +2,9 @@
 
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { AdminNav } from "../AdminNav";
 
-type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send"; custom_color?: string | null };
 type UISettings = {
   theme: {
     send_color: string;
@@ -51,7 +52,7 @@ export default function AdminUIPage() {
       const res = await fetch("/api/admin/settings", { cache: "no-store" as any });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בטעינת הגדרות");
-      setUi((j?.ui as UISettings) || DEFAULT_UI);
+      setUi(((j?.value?.ui as UISettings) || DEFAULT_UI));
     } catch (e: any) {
       setMsg(e?.message || "שגיאה");
     } finally {
@@ -111,6 +112,8 @@ export default function AdminUIPage() {
   return (
     <main style={{ padding: 18, direction: "rtl", maxWidth: 900, margin: "0 auto", color: "white" }}>
       <h1 style={{ marginTop: 0 }}>🎛️ ניהול עיצוב וכפתורים</h1>
+
+      <AdminNav current="ui" />
 
       <div style={card()}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -213,6 +216,33 @@ export default function AdminUIPage() {
                           <option value="danger">Danger</option>
                           <option value="send">Send (ירוק)</option>
                         </select>
+                      </label>
+
+                      <label style={field()}>
+                        <div style={lab()}>צבע מותאם אישית</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <input
+                            type="color"
+                            value={
+                              cfg.custom_color ||
+                              (cfg.color === "send"
+                                ? ui.theme.send_color
+                                : cfg.color === "danger"
+                                ? ui.theme.danger_color
+                                : ui.theme.default_color)
+                            }
+                            onChange={(e) => setButton(b.key, { custom_color: e.target.value })}
+                          />
+                          <input
+                            value={cfg.custom_color || ""}
+                            onChange={(e) => setButton(b.key, { custom_color: e.target.value ? e.target.value : null })}
+                            style={inp()}
+                            placeholder="#RRGGBB"
+                          />
+                          <button type="button" onClick={() => setButton(b.key, { custom_color: null })} style={btn("default")}>
+                            אפס צבע
+                          </button>
+                        </div>
                       </label>
                     </div>
                   </div>
