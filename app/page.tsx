@@ -1,10 +1,11 @@
-
-const PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
-const BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
 "use client";
 
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+const ENV_PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
+const ENV_BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
+
 
 type PostRow = {
   id: string;
@@ -19,6 +20,11 @@ type PostRow = {
 };
 
 type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type PaymentSettings = {
+  paybox_url?: string;
+  bit_url?: string;
+};
+
 type UISettings = {
   theme: {
     send_color: string; // שליחה (ירוק)
@@ -121,6 +127,7 @@ export default function HomePage() {
   const [ownerToken, setOwnerToken] = useState("");
 
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
+  const [payments, setPayments] = useState<PaymentSettings>({});
   const [uiLoaded, setUiLoaded] = useState(false);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
@@ -176,6 +183,7 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       const next = safeMergeUI(j?.ui);
       setUi(next);
+      setPayments((j?.payments as PaymentSettings) || (j?.gift as PaymentSettings) || {});
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -364,41 +372,41 @@ export default function HomePage() {
         </header>
 
 
-        {(PAYBOX_URL || BIT_URL) ? (
+        {(payboxUrl || bitUrl) ? (
           <section style={{ ...styles.card, background: ui.theme.card_bg }}>
             <h2 style={styles.h2}>🎁 שליחת מתנה</h2>
 
             <div
               style={{
                 ...styles.payGrid,
-                gridTemplateColumns: PAYBOX_URL && BIT_URL ? "1fr 1fr" : "1fr",
+                gridTemplateColumns: payboxUrl && bitUrl ? "1fr 1fr" : "1fr",
               }}
             >
-              {PAYBOX_URL ? (
+              {payboxUrl ? (
                 <a
-                  href={PAYBOX_URL}
+                  href={payboxUrl}
                   target="_blank"
                   rel="noreferrer"
                   style={styles.payBtn}
                   aria-label="PayBox"
                 >
                   <div style={styles.payLogoWrap}>
-                    <span style={styles.payLogoText}>PB</span>
+                    <img src="/payments/paybox.png" alt="PayBox" style={styles.payLogoImg as any} />
                   </div>
                   <div style={styles.payLabel}>PayBox</div>
                 </a>
               ) : null}
 
-              {BIT_URL ? (
+              {bitUrl ? (
                 <a
-                  href={BIT_URL}
+                  href={bitUrl}
                   target="_blank"
                   rel="noreferrer"
                   style={styles.payBtn}
                   aria-label="Bit"
                 >
                   <div style={styles.payLogoWrap}>
-                    <span style={styles.payLogoText}>bit</span>
+                    <img src="/payments/bit.png" alt="Bit" style={styles.payLogoImg as any} />
                   </div>
                   <div style={styles.payLabel}>Bit</div>
                 </a>
