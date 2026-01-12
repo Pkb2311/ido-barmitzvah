@@ -478,29 +478,25 @@ export default function HomePage() {
           <p style={styles.sub}>
             {content.header_subtitle || `כתבו ברכה ל${content.honoree_name}. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.`}
           </p>
-          {payments.enabled && (payments.bit_url || payments.paybox_url) ? (
-            <div style={styles.paymentsWrap}>
-              <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
-              <div style={styles.paymentsBtns}>
-                {payments.bit_url ? (
-                  <a href={payments.bit_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                    <button type="button" style={btn("default", ui)}>
-                      Bit
-                    </button>
-                  </a>
-                ) : null}
                 {payments.paybox_url ? (
-                  <a href={payments.paybox_url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
-                    <button type="button" style={btn("default", ui)}>
-                      PayBox
-                    </button>
-                  </a>
+                  <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" />
                 ) : null}
               </div>
             </div>
           ) : null}
 
         </header>
+
+
+{payments.enabled && (payments.bit_url || payments.paybox_url) ? (
+  <section style={{ ...styles.card, background: ui.theme.card_bg, ...styles.paymentsCard }}>
+    <div style={styles.paymentsTitle}>{payments.title || "🎁 שליחת מתנה"}</div>
+    <div style={styles.paymentsBtns}>
+      {payments.bit_url ? <PaymentIconLink href={payments.bit_url} label="Bit" kind="bit" /> : null}
+      {payments.paybox_url ? <PaymentIconLink href={payments.paybox_url} label="PayBox" kind="paybox" /> : null}
+    </div>
+  </section>
+) : null}
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>{content.form_title || "אשמח לברכה מרגשת ממך"}</h2>
@@ -771,23 +767,44 @@ export default function HomePage() {
 
 
 function isYouTubeUrl(url: string) {
-  return /(?:youtube\.com\/watch\?v=|youtu\.be\/)/i.test(url);
-}
-
-function getYouTubeEmbedUrl(url: string) {
   try {
     const u = new URL(url);
-    let id = "";
-    if (u.hostname.includes("youtu.be")) {
-      id = u.pathname.replace("/", "");
-    } else {
-      id = u.searchParams.get("v") || "";
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    return host === "youtu.be" || host.endsWith("youtube.com");
+  } catch {
+    return /(?:youtube\.com|youtu\.be)/i.test(url);
+  }
+}
+
+function extractYouTubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (host === "youtu.be") {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      return id || null;
     }
-    if (!id) return null;
-    return `https://www.youtube.com/embed/${id}`;
+
+    if (host.endsWith("youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return v;
+
+      const parts = u.pathname.split("/").filter(Boolean);
+      const idx = parts.findIndex((p) => ["shorts", "live", "embed"].includes(p));
+      if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+    }
+
+    return null;
   } catch {
     return null;
   }
+}
+
+function getYouTubeEmbedUrl(url: string) {
+  const id = extractYouTubeId(url);
+  if (!id) return null;
+  return `https://www.youtube.com/embed/${id}`;
 }
 
 type UnfurlData = {
@@ -797,6 +814,61 @@ type UnfurlData = {
   image?: string;
   site_name?: string;
 };
+
+function PaymentIconLink(props: { href: string; label: string; kind: "bit" | "paybox" }) {
+  const { href, label, kind } = props;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" style={styles.payIconLink as any} title={label}>
+      <div style={styles.payIconCircle}>
+        <PaymentLogo kind={kind} />
+      </div>
+      <div style={styles.payIconLabel}>{label}</div>
+    </a>
+  );
+}
+
+function PaymentLogo({ kind }: { kind: "bit" | "paybox" }) {
+  const [failed, setFailed] = useState(false);
+
+  const src = kind === "bit" ? "/images/bit.png" : "/images/paybox.png";
+
+  if (failed) return kind === "bit" ? <BitIcon /> : <PayBoxIcon />;
+
+  return (
+    <img
+      src={src}
+      alt=""
+      width={40}
+      height={40}
+      style={{ width: 40, height: 40, objectFit: "contain" }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function BitIcon() {
+) {
+  // אייקון מינימלי (לא רשמי). אם תרצה לוגו רשמי, אפשר להחליף ל-img מה-public.
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="13" cy="13" r="13" fill="#00C853" />
+      <text x="13" y="17" textAnchor="middle" fontSize="12" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
+        bit
+      </text>
+    </svg>
+  );
+}
+
+function PayBoxIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="13" cy="13" r="13" fill="#1976D2" />
+      <text x="13" y="17" textAnchor="middle" fontSize="11" fontWeight="900" fill="white" fontFamily="Arial, sans-serif">
+        PB
+      </text>
+    </svg>
+  );
+}
 
 function LinkPreview({ url }: { url: string }) {
   const [data, setData] = useState<UnfurlData | null>(null);
@@ -968,6 +1040,48 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.9,
     lineHeight: 1.6,
   },
+  paymentsWrap: {
+    marginTop: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    padding: 12,
+    background: "rgba(255,255,255,0.03)",
+  },
+  paymentsTitle: {
+    fontWeight: 900,
+    marginBottom: 10,
+    opacity: 0.95,
+  },
+  paymentsBtns: {
+    display: "flex",
+    gap: 14,
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  payIconLink: {
+    display: "inline-flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+    textDecoration: "none",
+    color: "white",
+    minWidth: 64,
+  },
+  payIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(0,0,0,0.20)",
+    boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+  },
+  payIconLabel: {
+    fontSize: 13,
+    fontWeight: 900,
+    opacity: 0.92,
+  },
   card: {
     border: "1px solid rgba(255,255,255,0.12)",
     borderRadius: 18,
@@ -1073,6 +1187,52 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 10,
     whiteSpace: "pre-wrap",
     lineHeight: 1.6,
+  },
+  linkPreviewWrap: {
+    marginTop: 8,
+  },
+  linkCard: {
+    display: "flex",
+    gap: 10,
+    alignItems: "stretch",
+    textDecoration: "none",
+    color: "white",
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(0,0,0,0.18)",
+    borderRadius: 14,
+    overflow: "hidden",
+    padding: 10,
+  },
+  linkCardImg: {
+    width: 92,
+    height: 72,
+    objectFit: "cover",
+    borderRadius: 12,
+    flex: "0 0 auto",
+  },
+  linkCardTitle: {
+    fontWeight: 900,
+    fontSize: 14,
+    lineHeight: 1.3,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  linkCardDesc: {
+    fontSize: 13,
+    opacity: 0.85,
+    lineHeight: 1.35,
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitLineClamp: 2 as any,
+    WebkitBoxOrient: "vertical" as any,
+  },
+  linkCardDomain: {
+    fontSize: 12,
+    opacity: 0.75,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   editHelp: {
     marginTop: 10,
