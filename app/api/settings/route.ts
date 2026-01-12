@@ -8,14 +8,75 @@ function supabasePublic() {
   return createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+function getPath(obj: any, path: string[]): any {
+  let cur = obj;
+  for (const key of path) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as any)[key];
+  }
+  return cur;
+}
+
+function pickFirstString(...candidates: any[]): string {
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return "";
+}
+
 export async function GET() {
   const supabase = supabasePublic();
-  const { data, error } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
 
-  if (error) return NextResponse.json({ ui: null, require_approval: true }, { status: 200 });
+  const { data } = await supabase.from("site_settings").select("key,value");
+  const byKey: Record<string, any> = {};
+  for (const row of data ?? []) byKey[row.key] = row.value ?? {};
 
-  const require_approval = data?.value?.require_approval ?? true;
-  const ui = data?.value?.ui ?? null;
+  const site = byKey["site"] ?? {};
+  const ui =
+    site.ui ??
+    site.u ??
+    byKey["ui"] ??
+    byKey["ui_settings"] ??
+    null;
 
-  return NextResponse.json({ require_approval, ui }, { status: 200 });
+  const require_approval = site.require_approval ?? true;
+
+  // Payment links can live in different places depending on admin UI versions.
+  const paybox_url = pickFirstString(
+    site.paybox_url,
+    site.paybox,
+    getPath(site, ["payments", "paybox_url"]),
+    getPath(site, ["payments", "paybox"]),
+    getPath(site, ["gift", "paybox_url"]),
+    getPath(site, ["gift", "paybox"]),
+    getPath(site, ["gifts", "paybox_url"]),
+    getPath(site, ["gifts", "paybox"]),
+    getPath(byKey["ui_settings"], ["payments", "paybox_url"]),
+    getPath(byKey["ui_settings"], ["gift", "paybox_url"])
+  );
+
+  const bit_url = pickFirstString(
+    site.bit_url,
+    site.bit,
+    getPath(site, ["payments", "bit_url"]),
+    getPath(site, ["payments", "bit"]),
+    getPath(site, ["gift", "bit_url"]),
+    getPath(site, ["gift", "bit"]),
+    getPath(site, ["gifts", "bit_url"]),
+    getPath(site, ["gifts", "bit"]),
+    getPath(byKey["ui_settings"], ["payments", "bit_url"]),
+    getPath(byKey["ui_settings"], ["gift", "bit_url"])
+  );
+
+  return NextResponse.json(
+    {
+      require_approval,
+      ui,
+      payments: {
+        paybox_url,
+        bit_url,
+      },
+    },
+    { status: 200 }
+  );
 }

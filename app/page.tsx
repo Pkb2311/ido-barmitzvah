@@ -3,6 +3,10 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+const ENV_PAYBOX_URL = process.env.NEXT_PUBLIC_PAYBOX_URL || "";
+const ENV_BIT_URL = process.env.NEXT_PUBLIC_BIT_URL || "";
+
+
 type PostRow = {
   id: string;
   created_at: string;
@@ -16,6 +20,11 @@ type PostRow = {
 };
 
 type UIButtonCfg = { show: boolean; label: string; color: "default" | "danger" | "send" };
+type PaymentSettings = {
+  paybox_url?: string;
+  bit_url?: string;
+};
+
 type UISettings = {
   theme: {
     send_color: string; // שליחה (ירוק)
@@ -118,6 +127,7 @@ export default function HomePage() {
   const [ownerToken, setOwnerToken] = useState("");
 
   const [ui, setUi] = useState<UISettings>(DEFAULT_UI);
+  const [payments, setPayments] = useState<PaymentSettings>({});
   const [uiLoaded, setUiLoaded] = useState(false);
 
   const [posts, setPosts] = useState<PostRow[]>([]);
@@ -173,6 +183,7 @@ export default function HomePage() {
       const j = await res.json().catch(() => ({}));
       const next = safeMergeUI(j?.ui);
       setUi(next);
+      setPayments((j?.payments as PaymentSettings) || (j?.gift as PaymentSettings) || {});
     } catch {
       // נשארים על DEFAULT_UI
     } finally {
@@ -335,6 +346,9 @@ export default function HomePage() {
 
   const count = useMemo(() => posts.length, [posts.length]);
 
+  const payboxUrl = useMemo(() => (payments?.paybox_url || ENV_PAYBOX_URL || "").trim(), [payments?.paybox_url]);
+  const bitUrl = useMemo(() => (payments?.bit_url || ENV_BIT_URL || "").trim(), [payments?.bit_url]);
+
   // ---------- צבעי כפתורים מהניהול ----------
   function resolveBtnKind(cfg: UIButtonCfg, force?: "send") {
     if (force === "send") return "send";
@@ -359,6 +373,53 @@ export default function HomePage() {
           </div>
           <p style={styles.sub}>כתבו ברכה לעידו. אפשר לצרף תמונה/וידאו או להוסיף קישור. במובייל אפשר גם לצלם ישר מהדף.</p>
         </header>
+
+
+        {(payboxUrl || bitUrl) ? (
+          <section style={{ ...styles.card, background: ui.theme.card_bg }}>
+            <h2 style={styles.h2}>🎁 שליחת מתנה</h2>
+
+            <div
+              style={{
+                ...styles.payGrid,
+                gridTemplateColumns: payboxUrl && bitUrl ? "1fr 1fr" : "1fr",
+              }}
+            >
+              {payboxUrl ? (
+                <a
+                  href={payboxUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.payBtn}
+                  aria-label="PayBox"
+                >
+                  <div style={styles.payLogoWrap}>
+                    <img src="/payments/paybox.png" alt="PayBox" style={styles.payLogoImg as any} />
+                  </div>
+                  <div style={styles.payLabel}>PayBox</div>
+                </a>
+              ) : null}
+
+              {bitUrl ? (
+                <a
+                  href={bitUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={styles.payBtn}
+                  aria-label="Bit"
+                >
+                  <div style={styles.payLogoWrap}>
+                    <img src="/payments/bit.png" alt="Bit" style={styles.payLogoImg as any} />
+                  </div>
+                  <div style={styles.payLabel}>Bit</div>
+                </a>
+              ) : null}
+            </div>
+
+            <div style={styles.payHint}>נפתח בחלון חדש</div>
+          </section>
+        ) : null}
+
 
         <section style={{ ...styles.card, background: ui.theme.card_bg }}>
           <h2 style={styles.h2}>אשמח לברכה מרגשת ממך</h2>
@@ -732,6 +793,52 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "1fr",
     gap: 12,
+  },
+
+  payGrid: {
+    marginTop: 12,
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  payBtn: {
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.06)",
+    borderRadius: 22,
+    padding: 14,
+    minHeight: 96,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    textDecoration: "none",
+    color: "white",
+    fontWeight: 900,
+  },
+  payLogoWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(0,0,0,0.15)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payLogoText: {
+    fontSize: 18,
+    letterSpacing: 0.2,
+  },
+  payLabel: {
+    fontSize: 16,
+    opacity: 0.95,
+  },
+  payHint: {
+    marginTop: 10,
+    opacity: 0.75,
+    fontSize: 13,
+    textAlign: "center",
   },
   field: {
     display: "flex",
