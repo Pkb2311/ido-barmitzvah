@@ -79,7 +79,7 @@ export default function PaymentsPage() {
   return (
     <div style={styles.page}>
       <h1 style={styles.h1}>ניהול תשלומים 💸</h1>
-    <AdminNav current="settings" />
+   <AdminNav current="payments" />
 
       {err ? <div style={styles.err}>{err}</div> : null}
       {ok ? <div style={styles.ok}>{ok}</div> : null}
