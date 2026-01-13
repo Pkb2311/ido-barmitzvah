@@ -83,7 +83,7 @@ export default function AdminUIPage() {
     setMsg(null);
     try {
       const res = await fetch("/api/admin/settings", {
-        method: "PATCH",
+        method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ui }),
       });
