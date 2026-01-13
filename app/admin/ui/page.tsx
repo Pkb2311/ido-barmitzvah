@@ -83,9 +83,9 @@ export default function AdminUIPage() {
     setMsg(null);
     try {
       const res = await fetch("/api/admin/settings", {
-        method: "PATCH",
+        method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ui }),
+body: JSON.stringify({ value: { ui } }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בשמירה");
