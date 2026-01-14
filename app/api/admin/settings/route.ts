@@ -100,10 +100,17 @@ function normalizeValue(input: any): SiteSettingsValue {
 }
 
 async function readCurrent() {
-  const supabase = supabasePublic(); // קריאה יכולה להיות גם עם anon (אם יש RLS פתוח)
-  const { data } = await supabase.from("site_settings").select("key,value").eq("key", "site").single();
+  const supabase = supabaseServer(); // ✅ במקום anon
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", "site")
+    .single();
+
+  if (error) return DEFAULT_VALUE; // או normalizeValue(null)
   return normalizeValue(data?.value);
 }
+
 
 export async function GET() {
   const value = await readCurrent();
