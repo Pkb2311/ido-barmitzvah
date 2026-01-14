@@ -21,7 +21,6 @@ type UISettings = {
     remove: UIButtonCfg;
     refresh: UIButtonCfg;
   };
-};
 type SiteSettingsValue = {
   require_approval: boolean;
   ui: UISettings;
