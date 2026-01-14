@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 function supabasePublic() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -74,7 +75,7 @@ export async function GET() {
     {
       status: 200,
       headers: {
-          "Cache-Control": "no-store, max-age=0, must-revalidate",
+             "Cache-Control": "no-store, max-age=0, must-revalidate",
       },
     }
   );
