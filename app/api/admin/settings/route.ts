@@ -22,12 +22,19 @@ type UISettings = {
     refresh: UIButtonCfg;
   };
 };
-
 type SiteSettingsValue = {
   require_approval: boolean;
   ui: UISettings;
+  hero_image_url: string | null;
+  hero_link_url: string | null;
+  content: {
+    event_kind: string;
+    honoree_name: string;
+    header_title: string;
+    header_subtitle: string;
+    form_title: string;
+  };
 };
-
 const DEFAULT_VALUE: SiteSettingsValue = {
   require_approval: true,
   ui: {
