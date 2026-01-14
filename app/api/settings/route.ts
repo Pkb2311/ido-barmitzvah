@@ -1,8 +1,9 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 // app/api/settings/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function supabasePublic() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -34,16 +35,10 @@ export async function GET() {
   for (const row of data ?? []) byKey[row.key] = row.value ?? {};
 
   const site = byKey["site"] ?? {};
-  const ui =
-    site.ui ??
-    site.u ??
-    byKey["ui"] ??
-    byKey["ui_settings"] ??
-    null;
+  const ui = site.ui ?? site.u ?? byKey["ui"] ?? byKey["ui_settings"] ?? null;
 
   const require_approval = site.require_approval ?? true;
 
-  // Payment links can live in different places depending on admin UI versions.
   const paybox_url = pickFirstString(
     site.paybox_url,
     site.paybox,
@@ -70,16 +65,17 @@ export async function GET() {
     getPath(byKey["ui_settings"], ["gift", "bit_url"])
   );
 
- return NextResponse.json(
-  {
-    require_approval,
-    ui,
-    payments: { paybox_url, bit_url },
-  },
-  {
-    status: 200,
-    headers: {
-      "Cache-Control": "no-store, max-age=0",
+  return NextResponse.json(
+    {
+      require_approval,
+      ui,
+      payments: { paybox_url, bit_url },
     },
-  }
-);
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    }
+  );
+}
