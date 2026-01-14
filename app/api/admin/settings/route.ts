@@ -34,7 +34,6 @@ type SiteSettingsValue = {
     header_subtitle: string;
     form_title: string;
   };
-};
 const DEFAULT_VALUE: SiteSettingsValue = {
   require_approval: true,
   ui: {
