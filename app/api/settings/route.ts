@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 // app/api/settings/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -68,15 +70,16 @@ export async function GET() {
     getPath(byKey["ui_settings"], ["gift", "bit_url"])
   );
 
-  return NextResponse.json(
-    {
-      require_approval,
-      ui,
-      payments: {
-        paybox_url,
-        bit_url,
-      },
+ return NextResponse.json(
+  {
+    require_approval,
+    ui,
+    payments: { paybox_url, bit_url },
+  },
+  {
+    status: 200,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
     },
-    { status: 200 }
-  );
-}
+  }
+);
