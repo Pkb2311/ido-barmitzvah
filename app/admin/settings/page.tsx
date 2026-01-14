@@ -108,8 +108,14 @@ export default function AdminSettingsPage() {
       const res = await fetch("/api/admin/settings", { cache: "no-store" as any });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || "שגיאה בטעינת הגדרות");
-      setValue((j?.value as SiteSettingsValue) || DEFAULT_VALUE);
-    } catch (e: any) {
+const v = (j?.value ?? {}) as Partial<SiteSettingsValue>;
+setValue({
+  ...DEFAULT_VALUE,
+  ...v,
+  ui: { ...DEFAULT_VALUE.ui, ...(v.ui ?? {}) } as any,
+  content: { ...DEFAULT_VALUE.content, ...(v.content ?? {}) } as any,
+});
+          } catch (e: any) {
       setMsg(e?.message || "שגיאה");
     } finally {
       setLoading(false);
